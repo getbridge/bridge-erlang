@@ -1,0 +1,2 @@
+-module(bridge_client).
+-export([new/2]).
