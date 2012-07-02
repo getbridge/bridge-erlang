@@ -1,4 +1,5 @@
--module(avl_tree). % Map implemented with an AVL tree.
+-module(avl_tree).
+ % Map implemented with an AVL tree. Strictly worse than gb_trees. Unused.
 -export([new/1, find/2, insert/3, remove/2, tree_to_list/1]).
 
 -record(avl, {
@@ -12,27 +13,26 @@
 new([]) ->
   undefined;
 new(Lst) when is_list(Lst) -> % Takes a proplist. Not enforced.
-  [{K, V}|Tail] = Lst,
-  {Gt, Lte} = lists:partition(fun (X) -> element(1, X) > K end, Tail),
-  new(K, V, new(Lte), new(Gt)).
+  lists:foldl(fun ({K, V}, T) -> insert(T, K, V) end, undefined, Lst).
 
 new(K, V, L, R) ->
   balance(
     #avl{key=K,
 	 val=V,
-	 left=balance(L),
-	 right=balance(R),
-	 height=(max(height(L), height(R)) + 1)}
+	 left=L,
+	 right=R,
+	 height=(max(height(L), height(R)) + 1)
+	}
    ).
 
-insert(#avl{key=K, val=V, left=L, right=R}, Key, Val) ->
+insert(T = #avl{key=K, val=V, left=L, right=R}, Key, Val) ->
   if
     Key > K ->
       new(K, V, L, insert(R, Key, Val));
     Key < K ->
       new(K, V, insert(L, Key, Val), R);
     Key == K ->
-      new(Key, Val, L, R)
+      T#avl{val=Val}
   end;
 insert(undefined, Key, Val) ->
   new(Key, Val, undefined, undefined).
