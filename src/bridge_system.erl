@@ -1,5 +1,5 @@
-module(bridge_system).
--export([hookChannelHandler/2, hookChannelHandler/1]).
+-module(bridge_system).
+-export([hookChannelHandler/3, hookChannelHandler/2]).
 -export([getService/2]).
--export([remoteError]).
+-export([remoteError/1]).
 
