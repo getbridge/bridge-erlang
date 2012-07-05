@@ -22,14 +22,17 @@ handle_call({encode, Data}, From, State) ->
 handle_call({decode, Data}, From, State) ->
   {reply, _Reply, _NewState} = decode(Data, State).
 
+
 decode(Data, State) when is_list(Data) ->
-  {Reply, State} = map(fun decode/3, [Data, From, State]).
+  {Reply, State} = lists:map(fun decode/2, [Data, State]);
 decode(Data, State) ->
   ok.
-encode(Data, From, State) ->
-  {Reply, State} = map(fun encode/3, [Data, From, State]).
+
+encode(Data, State) when is_list(Data) ->
+  {Reply, State} = lists:map(fun encode/2, [Data, State]);
 encode(Data, State) ->
   ok.
+
 
 handle_cast(_Request, State) ->
   State.

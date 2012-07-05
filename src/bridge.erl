@@ -16,6 +16,8 @@
 -export([publish_service/3, publish_service/4]).
 -export([join_channel/3, join_channel/4, join_channel/5]).
 -export([get_service/2, get_service/3, get_channel/2]).
+-export([leave_service/3, leave_service/4]).
+-export([leave_channel/3, leave_channel/4]).
 
 -export([get_client/2, context/1]).
 
@@ -54,11 +56,10 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
   State.
 
-cast(Server, {Method, Args}, _State) ->
-% Example usage: bridge:cast(get_service("auth"), {Method, Args}, _State)
-  send('SEND',
-       [{destination, {ref, Server ++ [Method]}}, {args, Args}],
-       _State).
+cast(Server, {Method, Args}, {ok, #bridge{connection_handler = Conn}}) ->
+% Example: bridge:cast(get_service("auth"), {join, Args = [term()]}, Bridge)
+  bridge_connection:cast(Conn, {'SEND', [{ref, Server ++ [Method]},
+					 {args, Args}]}).
 
 handle_info({error, Msg}, {ok, #bridge{error_handler = Err}}) ->
   bridge_event:notify(Err, Msg);
@@ -74,9 +75,6 @@ on_disconnect(Callback, _State = {ok, #bridge{disconnect_handler = Disc}}) ->
 on_reconnect(Callback, _State = {ok, #bridge{reconnect_handler = Reconn}}) ->
   bridge_event:add_handler(Reconn, Callback).
 
-send(Command, Data, _State = {ok, #bridge{connection_handler = Conn}}) ->
-  gen_server:cast(Conn, {Command, Data}).
-
 new(Opts) ->
   start_link(Opts).
 
@@ -85,10 +83,12 @@ connect(State) ->
 
 publish_service(SvcName, Handler, State) ->
   publish_service(SvcName, Handler, undefined, State).
-publish_service(SvcName, Handler, Callback, State) ->
-  send('JOINWORKERPOOL',
-       [{name, SvcName}, {handler, Handler}, {callback, Callback}],
-       State).
+publish_service(SvcName, Handler, Callback,
+		#bridge{connection_handler = Conn}) ->
+  bridge_connection:cast(Conn, {'JOINWORKERPOOL',
+				[{name, SvcName},
+				 {handler, Handler},
+				 {callback, Callback}]}).
 
 join_channel(ChName, Handler, State) ->
   join_channel(ChName, Handler, true, State).
@@ -96,34 +96,39 @@ join_channel(ChName, Handler, Writeable, State) when is_boolean(Writeable) ->
   join_channel(ChName, Handler, Writeable, undefined, State);
 join_channel(ChName, Handler, Callback, State) ->
   join_channel(ChName, Handler, true, Callback, State).
-join_channel(ChName, Handler, Writeable, Callback, State) ->
-  send('JOINCHANNEL',
-       [{name, ChName},       {handler, Handler},
-	{callback, Callback}, {writeable, Writeable}],
-       State).
+join_channel(ChName, Handler, Writeable, Callback,
+	     #bridge{connection_handler = Conn}) ->
+  bridge_connection:cast(Conn, {'JOINCHANNEL',
+				[{name, ChName},
+				 {handler, Handler},
+				 {callback, Callback},
+				 {writeable, Writeable}]}).
 
 leave_service(ChName, Handler, State) ->
   leave_service(ChName, Handler, undefined, State).
-leave_service(ChName, Handler, Callback, State) ->
-  send('LEAVEWORKERPOOL',
-       [{name, SvcName}, {handler, Handler}, {callback, Callback}],
-       State).
+leave_service(ChName, Handler, Callback,
+	      #bridge{connection_handler = Conn}) ->
+  bridge_connection:cast(Conn, {'LEAVEWORKERPOOL',
+				[{name, ChName},
+				 {handler, Handler},
+				 {callback, Callback}]}).
 
-leave_channel(ChName, Handler, Writeable, State) ->
-  leave_service(ChName, Handler, State).
-leave_channel(ChName, Handler, Writeable, Callback, State) ->
-  send('LEAVECHANNEL',
-       [{name, ChName}, {handler, Handler}, {callback, Callback}],
-       State).
-
+leave_channel(ChName, Handler, State) ->
+  leave_service(ChName, Handler, undefined, State).
+leave_channel(ChName, Handler, Callback,
+	      #bridge{connection_handler = Conn}) ->
+  bridge_connection:cast(Conn, {'LEAVECHANNEL',
+				[{name, ChName},
+				 {handler, Handler},
+				 {callback, Callback}]}).
 
 get_service(SvcName, _State) ->
   ["named", SvcName, SvcName].
 get_service(SvcName, Client, _State) ->
   Client ++ [SvcName].
 
-get_channel(ChName, State) ->
-  send('GETCHANNEL', [{name, ChName}], State),
+get_channel(ChName, #bridge{connection_handler = Conn}) ->
+  bridge_connection:cast(Conn, {'GETCHANNEL', [{name, ChName}]}),
   ["channel", ChName, "channel:" ++ ChName].
 
 context({ok, #bridge{context=Context}}) ->
