@@ -19,26 +19,28 @@ call(Token, _Args = {_Data, _Process}) ->
 
 handle_call({encode, Data}, From, State) ->
   {reply, _Reply, _NewState} = encode(Data, State);
-handle_call({decode, Data}, From, State) ->
+handle_call({eval, Data}, From, State) ->
   {reply, _Reply, _NewState} = decode(Data, State).
 
 
 decode(Data, State) when is_list(Data) ->
-  {Reply, State} = lists:map(fun decode/2, [Data, State]);
+  {Head, NewState} = decode(hd(Data), State),
+  [Head | decode(tl(Data), NewState);
 decode(Data, State) ->
-  ok.
+  {Data, State}.
 
 encode(Data, State) when is_list(Data) ->
-  {Reply, State} = lists:map(fun encode/2, [Data, State]);
+  {Head, NewState} = decode(hd(Data), State),
+  [Head | decode(tl(Data), NewState);
 encode(Data, State) ->
-  ok.
+  {Data, State}.
 
 
 handle_cast(_Request, State) ->
-  State.
+  {noreply, State}.
 handle_info(_Request, State) ->
-  State.
+  {noreply, State}.
 code_change(_OldVsn, State, _Extra) ->
-  State.
+  {ok, State}.
 terminate(_Reason, _State) ->
   ok.

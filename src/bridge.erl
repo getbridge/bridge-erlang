@@ -1,6 +1,8 @@
 -module(bridge).
 -behaviour(gen_server).
 
+%% 
+
 % Gen server API, which should be familiar to Erlang speakers.
 -export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
@@ -21,13 +23,14 @@
 
 -export([get_client/2, context/1]).
 
--record(bridge, {opts			= [],
-		 connection_handler	= undefined,
-		 error_handler		= undefined,
-		 disconnect_handler	= undefined,
-		 reconnect_handler	= undefined,
-		 context		= undefined
-	       }).
+-record(bridge, {
+	  opts			= [],
+	  connection_handler	= undefined,
+	  error_handler		= undefined,
+	  disconnect_handler	= undefined,
+	  reconnect_handler	= undefined,
+	  context		= undefined
+	 }).
 
 start_link(Opts) ->
   gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
@@ -40,10 +43,10 @@ init(Options) ->
      {secure, true}],
   {ok, #bridge{
      opts = Opts,
-     connection_handler = bridge_connection:start_link(Opts),
-     error_handler = bridge_event:start_link(),
-     disconnect_handler = bridge_event:start_link(),
-     reconnect_handler = bridge_event:start_link()
+     connection_handler = bridge_connection:start_link({Opts, self()}),
+     error_handler = bridge_event:start_link(error),
+     disconnect_handler = bridge_event:start_link(disconnect),
+     reconnect_handler = bridge_event:start_link(reconnect)
     }
   }.
 
@@ -54,26 +57,32 @@ handle_cast(_Request, _State) ->
 terminate(_Reason, _State) ->
   ok.
 code_change(_OldVsn, State, _Extra) ->
-  State.
+  {ok, State}.
 
-cast(Server, {Method, Args}, {ok, #bridge{connection_handler = Conn}}) ->
+cast(Server, {Method, Args}, #bridge{connection_handler = Conn}) ->
 % Example: bridge:cast(get_service("auth"), {join, Args = [term()]}, Bridge)
   bridge_connection:cast(Conn, {'SEND', [{ref, Server ++ [Method]},
 					 {args, Args}]}).
 
-handle_info({error, Msg}, {ok, #bridge{error_handler = Err}}) ->
-  bridge_event:notify(Err, Msg);
-handle_info({disconnect, Msg}, {ok, #bridge{disconnect_handler = Disc}}) ->
-  bridge_event:notify(Disc, Msg);
-handle_info({reconnect, Msg}, {ok, #bridge{reconnect_handler = Reconn}}) ->
-  bridge_event:notify(Reconn, Msg).
+handle_info({error, M}, S = #bridge{error_handler = E}) ->
+  bridge_event:notify(E, M),
+  {noreply, S};
+handle_info({disconnect, M}, S = #bridge{disconnect_handler = D}) ->
+  bridge_event:notify(D, M),
+  {noreply, S};
+handle_info({reconnect, M}, #bridge{reconnect_handler = R}) ->
+  bridge_event:notify(R, M),
+  {noreply, S}.
 
-on_error(Callback, _State = {ok, #bridge{error_handler = Err}}) ->
-  bridge_event:add_handler(Err, Callback).
-on_disconnect(Callback, _State = {ok, #bridge{disconnect_handler = Disc}}) ->
-  bridge_event:add_handler(Disc, Callback).
-on_reconnect(Callback, _State = {ok, #bridge{reconnect_handler = Reconn}}) ->
-  bridge_event:add_handler(Reconn, Callback).
+on_error(Callback, _State = #bridge{error_handler = E}) ->
+  bridge_event:add_handler(E, Callback),
+  {ok, _State}.
+on_disconnect(Callback, _State = #bridge{disconnect_handler = D}) ->
+  bridge_event:add_handler(D, Callback),
+  {ok, _State}.
+on_reconnect(Callback, _State = #bridge{reconnect_handler = R}) ->
+  bridge_event:add_handler(R, Callback),
+  {ok, _State}.
 
 new(Opts) ->
   start_link(Opts).
@@ -131,7 +140,7 @@ get_channel(ChName, #bridge{connection_handler = Conn}) ->
   bridge_connection:cast(Conn, {'GETCHANNEL', [{name, ChName}]}),
   ["channel", ChName, "channel:" ++ ChName].
 
-context({ok, #bridge{context=Context}}) ->
+context(#bridge{context=Context}) ->
   Context.
 
 get_client(ClientId, _State) ->

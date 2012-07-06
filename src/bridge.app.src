@@ -1,0 +1,7 @@
+{application,bridge,
+             [{description,"Bridge for Erlang"},
+              {vsn,"0.0.1"},
+              {registered,[]},
+              {applications,[kernel,stdlib,inets,sockjs]},
+              {mod,{bridge,[]}},
+              {modules,[]}]}.

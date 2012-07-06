@@ -1,18 +1,26 @@
 -module(bridge_connection).
 -behaviour(gen_server).
 
--export([start_link/1, process_message/1]).
+-export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 -export([code_change/3, terminate/2]).
 
+-record(state, {
+	  serializer	= undefined,
+	  socket	= undefined,
+	  parent	= undefined,
+	  queue         = [], % calls to be flushed upon connection.
+	 }).
+
+%% Connection manager.
 
 get_value(Key, PList) ->
   proplists:get_value(Key, PList).
 
 start_link(Opts) ->
-  gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
+  gen_server:start({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
-init(Options) ->
+init({Options, Parent}) ->
   inets:start(),
   Serializer = bridge_serializer:start_link(),
   case get_value(secure, Options) of
@@ -23,7 +31,7 @@ init(Options) ->
   end,
   case dispatch(Opts) of
     {ok, Conn} ->
-      {ok, Conn, Serializer};
+      {ok, #state{socket=Conn, serializer=Serializer, parent=Parent}};
     Msg ->
       {error, {redirector, Msg}}
   end.
@@ -59,19 +67,27 @@ connect(Host, Port) ->
   {ok, Sock} = gen_tcp:connect(Host, Port, [binary]),
   Sock.
 
-handle_cast({Command, Data}, _State = {ok, GatewaySock, Serializer}) ->
-  M = bridge_serializer:call(Serializer, [{command, Command}, {data, Data}]),
-  gen_tcp:send(GatewaySock, M);
+handle_cast({Command, Data}, State = #state{ok, TcpSock, Serializer}) ->
+  M = bridge_serializer:call(Serializer,
+			     {encode, [{command, Command}, {data, Data}]}),
+  {ok, TcpSock} = TcpSock:send(bridge_serializer:serialize(M)),
+  State.
+
 handle_call(_Request, _From, _State) ->
   ok.
 
-handle_info(Request, State) ->
-  ok.
+handle_info({tcp, _Socket, Str}, State) ->
+  {noreply, process_message(Str, State)};
+handle_info(_Request, _State) ->
+  {error, _Request}.
+
 code_change(_OldVsn, State, _Extra) ->
-  State.
+  {ok, State}.
+
 terminate(_Reason, _State) ->
   ok.
 
-
-process_message(Data) ->
-  ok.
+process_message(Msg, State) ->
+  M = bridge_serializer:unserialize(Msg),
+  bridge_serializer:call(Serializer, {eval, M}),
+  {ok, State}.
