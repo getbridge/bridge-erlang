@@ -23,9 +23,10 @@ start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
 init(_Args = {Opts, Parent}) ->
+    {ok, Conn} = bridge.connection:start_link(Opts),
     {ok, #state{mappings   = dict:new(),
 		bridge     = Parent,
-		connection = bridge.connection:start_link(Opts)}}.
+		connection = Conn}}.
 
 handle_call(_Args, _From, State) ->
     {noreply, State}.
@@ -36,20 +37,29 @@ decode(Data, State) when is_list(Data) ->
 decode(Data, State) ->
     {Data, State}.
 
-encode(Data, State) when is_list(Data) ->
-    {Head, NewState} = encode(hd(Data), State),
-    [Head | encode(tl(Data), NewState)];
+encode([], State) ->
+    {[], State};
+encode([Head, Tail], State) ->
+    {NewHead, NewState} = encode(Head, State),
+    [NewHead | encode(Tail, NewState)];
 encode(Data, State) ->
     {Data, State}.
 
+handle_cast(connect, State = #state{connection = Conn}) ->
+    gen_server:cast(Conn, connect),
+    {noreply, State};
+handle_cast(Msg = {connect_response, {Id, Secret}},
+	    State = #state{connection = Conn}) ->
+    gen_server:cast(Conn, Msg),
+    {noreply, State};
 handle_cast({encode, Op, Args}, State = #state{connection = Conn}) ->
-    {Encoded, NewState} = encode([{command, Op}, {data, Args}], State),
-    bridge.connection:cast(Conn, jiffy:encode(Encoded)),
+    {Encoded, NewState} = {{[{command, Op}, {data, Args}]}, State},
+    gen_server:cast(Conn, jiffy:encode(Encoded)),
     {noreply, NewState};
-handle_cast({decode, Op, Args}, State = #state{connection = Conn}) ->
-    {Encoded, NewState} = decode([{command, Op}, {data, Args}], State),
-    bridge.connection:cast(Conn, jiffy:decode(Encoded)),
-    {noreply, NewState}.
+handle_cast({decode, Data}, State = #state{connection = Conn}) ->
+    Decoded = jiffy:decode(Data),
+    gen_server:cast(Conn, Decoded),
+    {noreply, State}.
 
 handle_info(_Request, State) -> {noreply, State}.
 
@@ -59,3 +69,4 @@ terminate(_Reason, _State) -> ok.
 
 parse_json(Binary) ->
     jiffy:decode(Binary).
+

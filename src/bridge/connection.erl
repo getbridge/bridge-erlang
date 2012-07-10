@@ -9,7 +9,7 @@
 
 -import(proplists).
 -import(gen_server).
--import(gen_tcp).
+-import(erlang).
 -import(httpc).
 -import(inets).
 -import(ssl).
@@ -17,6 +17,7 @@
 -record(state,
         { socket	= undefined,
           serializer	= undefined,
+	  client_id     = undefined,
           queue		= []      % calls to be flushed upon connection.
         }).
 
@@ -26,7 +27,7 @@ get_value(Key, PList) ->
     proplists:get_value(Key, PList).
 
 start_link(Opts) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
+    gen_server:start({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
 init({Opts, Serializer}) ->
     inets:start(),
@@ -36,11 +37,7 @@ init({Opts, Serializer}) ->
             Options = [{redirector, get_value(secure_redirector, Opts)} | Opts];
         _ -> Options = Opts
     end,
-    case dispatch(Options) of
-        {ok, Sock} ->
-            {ok, #state{socket = Sock, serializer = Serializer}};
-        Msg -> {error, {redirector, Msg}}
-    end.
+    {ok, {#state{serializer=Serializer}, Options}}.
 
 %% Assuming Options is a proplist, still: will simply crash otherwise.
 dispatch(Opts) ->
@@ -63,25 +60,48 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}) ->
         undefined ->
             {error, Body};
         Data ->
-            connect(get_value(<<"bridge_host">>, Data),
-                    get_value(<<"bridge_port">>, Data))
+            connect(binary_to_list(get_value(<<"bridge_host">>, Data)),
+                    list_to_integer( binary_to_list(get_value(<<"bridge_port">>,
+							      Data))))
     end;
 redirector_response(_Res) -> {error, _Res}.
 
 connect(Host, Port) ->
-    {ok, _Sock} = gen_tcp:connect(binary_to_list(Host),
-				 list_to_integer(binary_to_list(Port)),
-				 [binary]).
+    _Sock = erlang:spawn(bridge.tcp,
+			 connect,
+			 [self(),
+			  Host,
+			  Port,
+			  [binary, {active, false}]]),
+    {ok, _Sock}.
 
 handle_cast(Data, State = #state{socket=TcpSock}) ->
-    gen_tcp:send(TcpSock, Data),
-    {ok, State}.
+    bridge.tcp:send(TcpSock, Data),
+    {noreply, State};
+handle_cast(connect, {State, Options}) ->
+    case dispatch(Options) of
+        {ok, Sock} ->
+	    bridge.tcp:send(Sock, <<"{\"command\":\"CONNECT\",",
+				 "\"data\":{\"session\":[null,null]}}">>),
+            {noreply, State#state{socket = Sock}};
+        Msg -> {error, {redirector, Msg}}
+    end;
+handle_cast(Data, {State = #state{queue = Q}, _Opts}) ->
+    {noreply, {State#state{queue = [Data] ++ Q}, _Opts}}.
 
 handle_call(_Request, _From, _State) ->
-    ok.
+    {noreply, _State}.
 
+handle_info({tcp, _Socket, Str}, State = #state{client_id = undefined}) ->
+    .io:format("Gots info: ~p.~n", [Str]),
+    NewState = extract_session(Str, State),
+    flush_queue(NewState),
+    {noreply, NewState};
 handle_info({tcp, _Socket, Str}, State) ->
     {noreply, process_message(Str, State)};
+handle_info(tcp_closed, State) ->
+    .io:format("socket closed!"),
+    {noreply, State};
 handle_info(_Request, _State) ->
     {error, _Request}.
 
@@ -91,6 +111,15 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, _State) ->
     ok.
 
+flush_queue(State = #state{queue = Q, socket = Sock}) ->
+    lists:foreach(fun(X) -> bridge.tcp:send(Sock, X) end, Q).
+
 process_message(Msg, State = #state{serializer = Serializer}) ->
+    .io:format("Msg: ~p~n", [Msg]),
     gen_server:cast(Serializer, {decode, Msg}),
     State.
+
+extract_session(Str = <<Id, "|", Secret>>, State = #state{serializer = S}) ->
+    .io:format("Id: ~p, Secret: ~p~n", [Id, Secret]),
+    gen_server:cast(S, {connect_response, {Id, Secret}}),
+    State#state{client_id = Id}.
