@@ -4,11 +4,13 @@
 %% Session layer.
 
 -export([start_link/1]).
-
--export([handle_call/3, handle_cast/2, handle_info/2,
-         init/1]).
-
+-export([handle_call/3, handle_cast/2, handle_info/2, init/1]).
 -export([code_change/3, terminate/2]).
+
+-import(proplists).
+-import(gen_server).
+-import(httpc).
+-import(inets).
 
 -record(state,
         { socket	= undefined,
@@ -20,7 +22,7 @@ get_value(Key, PList) ->
     proplists:get_value(Key, PList).
 
 start_link(Opts) ->
-    gen_server:start({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
 init({Opts, Serializer}) ->
     inets:start(),

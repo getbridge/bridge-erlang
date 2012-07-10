@@ -5,15 +5,27 @@
 
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1]).
 -export([code_change/3, terminate/2]).
+-export([start_link/1]).
+
+-export([parse_json/1]).
+
+-import(gen_server).
+-import(jiffy).
+-import(dict).
 
 -record(state,
 	{ connection = undefined,
-	  mappings   = dict:new()
+	  mappings   = dict:new(),
+	  bridge     = undefined
 	}).
 
+start_link(Opts) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
+
 init(_Args = {Opts, Parent}) ->
-    {ok, dict:new(), bridge = Parent,
-     connection = bridge.connection:start_link({Opts, self()})}.
+    {ok, #state{mappings   = dict:new(),
+		bridge     = Parent,
+		connection = bridge.connection:start_link(Opts)}}.
 
 handle_call(_Args, _From, State) ->
     {noreply, State}.
@@ -44,3 +56,6 @@ handle_info(_Request, State) -> {noreply, State}.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 terminate(_Reason, _State) -> ok.
+
+parse_json(Binary) ->
+    jiffy:decode(Binary).

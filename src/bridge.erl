@@ -26,7 +26,7 @@
 	}).
 
 start_link(Opts) ->
-    gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, Opts, []).
 
 new(Opts) -> start_link(Opts).
 
@@ -38,7 +38,7 @@ init(Options) ->
 	 {secure, true}],
     {ok,
      #state{opts = Opts,
-            serializer = bridge.serializer:start_link({Opts, self()}),
+            serializer = bridge.serializer:start_link(Opts),
             event_supervisor = bridge.event:start_link()}}.
 
 handle_call(_Request, _From, _State) ->
