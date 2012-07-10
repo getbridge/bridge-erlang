@@ -9,8 +9,10 @@
 
 -import(proplists).
 -import(gen_server).
+-import(gen_tcp).
 -import(httpc).
 -import(inets).
+-import(ssl).
 
 -record(state,
         { socket	= undefined,
@@ -18,6 +20,8 @@
           queue		= []      % calls to be flushed upon connection.
         }).
 
+get_value(Key, {PList}) ->
+    proplists:get_value(Key, PList);
 get_value(Key, PList) ->
     proplists:get_value(Key, PList).
 
@@ -28,6 +32,7 @@ init({Opts, Serializer}) ->
     inets:start(),
     case get_value(secure, Opts) of
         true ->
+	    ssl:start(),
             Options = [{redirector, get_value(secure_redirector, Opts)} | Opts];
         _ -> Options = Opts
     end,
@@ -48,21 +53,25 @@ dispatch(Opts) ->
 redirector(Opts) ->
     RedirUrl = get_value(redirector, Opts),
     ApiKey = get_value(api_key, Opts),
-    redirector_response(httpc:request(RedirUrl ++ "/redirect/" ++ ApiKey)).
+    Target = RedirUrl ++ "/redirect/" ++ ApiKey,
+    redirector_response(httpc:request(get, {Target, []}, [],
+				      [{body_format, binary}])).
 
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}) ->
-    case get_value("data", bridge.serializer:parse_json(Body)) of
+    Json = bridge.serializer:parse_json(Body),
+    case get_value(<<"data">>, Json) of
         undefined ->
             {error, Body};
         Data ->
-            connect(get_value("bridge_host", Data),
-                    get_value("bridge_port", Data))
+            connect(get_value(<<"bridge_host">>, Data),
+                    get_value(<<"bridge_port">>, Data))
     end;
 redirector_response(_Res) -> {error, _Res}.
 
 connect(Host, Port) ->
-    {ok, Sock} = gen_tcp:connect(Host, Port, [binary]),
-    Sock.
+    {ok, _Sock} = gen_tcp:connect(binary_to_list(Host),
+				 list_to_integer(binary_to_list(Port)),
+				 [binary]).
 
 handle_cast(Data, State = #state{socket=TcpSock}) ->
     gen_tcp:send(TcpSock, Data),
