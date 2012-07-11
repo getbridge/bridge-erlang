@@ -44,7 +44,7 @@ dispatch(Opts) ->
     case {get_value(host, Opts), get_value(port, Opts)} of
         {undefined, _} -> redirector(Opts);
         {_, undefined} -> redirector(Opts);
-        {Host, Port} -> connect(Host, Port)
+        {Host, Port}   -> connect(Host, Port)
     end.
 
 redirector(Opts) ->
@@ -67,22 +67,26 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}) ->
 redirector_response(_Res) -> {error, _Res}.
 
 connect(Host, Port) ->
-    _Sock = erlang:spawn(bridge.tcp,
-			 connect,
-			 [self(),
-			  Host,
-			  Port,
-			  [binary, {active, false}]]),
+    _Sock = erlang:spawn_link(bridge.tcp,
+			      connect,
+			      [self(),
+			       Host,
+			       Port,
+			       [binary]]),
     {ok, _Sock}.
 
-handle_cast(Data, State = #state{socket=TcpSock}) ->
-    bridge.tcp:send(TcpSock, Data),
-    {noreply, State};
 handle_cast(connect, {State, Options}) ->
+    ApiKey = list_to_binary([get_value(api_key, Options)]),
     case dispatch(Options) of
         {ok, Sock} ->
-	    bridge.tcp:send(Sock, <<"{\"command\":\"CONNECT\",",
-				 "\"data\":{\"session\":[null,null]}}">>),
+	    case get_value(secure, Options) of
+		true -> Sock ! {bridge, self(), ssl};
+		_    -> ok
+	    end,
+	    bridge.tcp:send(Sock,
+			    <<"{\"command\":\"CONNECT\",\"data\":",
+			    "{\"session\":[null,null],\"api_key\":",
+			    "\"", ApiKey/binary, "\"}}">>),
             {noreply, State#state{socket = Sock}};
         Msg -> {error, {redirector, Msg}}
     end;
