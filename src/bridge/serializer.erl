@@ -39,13 +39,14 @@ store(Key, State = #state{encode_map = Enc,
 		[]
 	end ++ [Str],
     {{[{ref, Val}]}, State#state{encode_map = dict:store(Key, Val, Enc),
-		      decode_map = dict:store(Val, Key, Dec)}}.
+				 decode_map = dict:store(Val, Key, Dec)}}.
 
 start_link(Opts) ->
-    random:seed(erlang:now()),
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
 init(_Args = {Opts, Parent}) ->
+    {A1, A2, A3} = erlang:now(),
+    random:seed(A1, A2, A3),
     {ok, Conn} = bridge.connection:start_link(Opts),
     {ok, #state{bridge     = Parent,
                 connection = Conn}}.
@@ -79,6 +80,8 @@ encode([Head | Tail], State) ->
 
 encode({[]}, State) ->
     {{[]}, State};
+encode({[{_Head, undefined} | Tail]}, State) ->
+    encode({Tail}, State);
 encode({[{Key, V} | Tail]}, State) ->
     {NewV, NewState} = encode(V, State),
     {{NewTail}, FinalState} = encode({Tail}, NewState),
@@ -98,12 +101,11 @@ handle_cast(Msg = {connect_response, {_Id, _Secret}},
     {noreply, State#state{client_id = list_to_binary(_Id)}};
 handle_cast({encode, {Op, Args}}, State = #state{connection = Conn}) ->
     {Encoded, NewState} = encode({[{command, Op}, {data, Args}]}, State),
-    .io:format("ENCODED: ~p~n", [Encoded]),
     gen_server:cast(Conn, jiffy:encode(Encoded)),
     {noreply, NewState};
-handle_cast({decode, Data}, State = #state{connection = Conn}) ->
+handle_cast({decode, Data}, State = #state{bridge = Core}) ->
     {Decoded, State} = decode(jiffy:decode(Data), State),
-    gen_server:cast(Conn, Decoded),
+    gen_server:cast(Core, Decoded),
     {noreply, State}.
 
 handle_info({Conn, _Info}, State = #state{connection = Conn,

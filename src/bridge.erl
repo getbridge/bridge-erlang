@@ -18,10 +18,13 @@ new(Opts) -> bridge.core:start_link(Opts).
 connect(Pid) ->
     gen_server:cast(Pid, connect).
 
+create_ref(Lst) ->
+    {[{ref, Lst}]}.
+
 %% Ex: bridge:cast(BridgePid, {get_service("auth"), join, Args = [term()]})
 cast(Pid, {Svc, Method, Args}) ->
-    Ref = Svc ++ [Method],
-    send_command(Pid, 'SEND', {[{ref, Ref}, {args, Args}]}).
+    Ref = create_ref(Svc ++ [Method]),
+    send_command(Pid, 'SEND', {[{destination, Ref}, {args, Args}]}).
 
 add_handler(Pid, E) ->
     {ok, Ev} = gen_server:start(E),
@@ -64,15 +67,16 @@ leave_channel(Pid, {ChannelName, Handler, Callback}) ->
 		   {handler, Handler},
 		   {callback, Callback}]}).
 
+%% Service name is provided as an atom, probably.
 get_service(_Bridge, SvcName) when SvcName =/= system ->
-    BinName = list_to_binary([SvcName]),
-    [ref, [named, BinName, BinName]];
+    BinName = atom_to_binary(SvcName, utf8),
+    [named, BinName, BinName];
 get_service(_Bridge, {Client, SvcName}) when SvcName =/= system ->
-    [ref, [list_to_binary(X) || X <- Client ++ [SvcName]]].
+    [list_to_binary([X]) || X <- Client ++ [SvcName]].
 
 get_channel(Bridge, ChannelName) ->
     send_command(Bridge, 'GETCHANNEL', {[{name, ChannelName}]}),
-    ["channel", ChannelName, "channel:" ++ ChannelName].
+    [<<"channel">>, ChannelName, <<"channel:", ChannelName/binary>>].
 
 context(Bridge) ->
     gen_server:call(Bridge, context).

@@ -67,11 +67,11 @@ handle_cast({outbound, {Op, Data}}, _State) ->
 handle_cast({add_handler, Mod}, _State) ->
     {ok, NewState} = add_handler(Mod, _State),
     {noreply, NewState};
-handle_cast({'SEND', {[{destination, Dest} | Args]}}, _State)
+handle_cast({[{destination, Dest} | Args]}, _State)
   when is_function(Dest) ->
-    apply(Dest, Args),
+    apply(Dest, Args ++ [self()]),
     {noreply, _State};
-handle_cast({'SEND', {[{destination, Dest} | Args]}}, _State) ->
+handle_cast({[{destination, Dest} | Args]}, _State) ->
     gen_server:cast(Dest, Args),
     {noreply, _State};
 handle_cast({connect_response, {Id, Secret}}, _State = #state{buffer = Buf}) ->

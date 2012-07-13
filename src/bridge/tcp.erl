@@ -24,13 +24,16 @@ loop(Conn, S, Send) ->
             {ok, SslSock} = ssl:connect(S, []),
             loop(Conn, SslSock, fun ssl:send/2);
         {bridge, Conn, Data} ->
+	    .io:format("Sending ~p~n~n", [Data]),
             Len = byte_size(Data),
             Send(S, <<Len:32, Data/binary>>),
             loop(Conn, S, Send);
         {tcp, S, <<Len:32, Data/binary>>} ->
-            receive_data(Conn, Len, Data);
+            receive_data(Conn, Len, Data),
+	    loop(Conn, S, Send);
         {ssl, S, <<Len:32, Data/binary>>} ->
-            receive_data(Conn, Len, Data);
+            receive_data(Conn, Len, Data),
+	    loop(Conn, S, Send);
         {tcp_closed, S} ->
             .io:format("Closed! ~n", []),
             Conn ! disconnect,
