@@ -1,5 +1,5 @@
 -module(bridge.tcp).
--export([send/2, connect/4]).
+-export([send/2, connect/4, receive_data/3]).
 -import(gen_tcp).
 -import(erlang).
 -import(ssl).
@@ -13,25 +13,33 @@ connect(Conn, Host, Port, Opts) ->
 send(Sock, Msg) ->
     Sock ! {bridge, self(), Msg}.
 
+receive_data(Conn, Len, Data) ->
+    .io:format("Got ~p~n", [Data]),
+    Conn ! {tcp, Data}.
+
 loop(Conn, S, Send) ->
     receive
-	{bridge, Conn, ssl} ->
-	    .io:format("Upgrading to SSL!~n", []),
-	    {ok, SslSock} = ssl:connect(S, []),
-	    loop(Conn, SslSock, fun ssl:send/2);
-	{tcp, S, Data} ->
-	    .io:format("Gots ~p~n", [Data]),
-	    Conn ! {tcp, Data};
-	{bridge, Conn, Data} ->
-	    .io:format("Sending out ~p~n", [Data]),
-	    Send(S, Data),
-	    loop(Conn, S, Send);
-	{tcp_closed, S} ->
-	    .io:format("Closed! ~n", []),
-	    Conn ! disconnect,
-	    exit(normal);
-	_Something ->
-	    .io:format("Unknown: ~p~n", [_Something]),
-	    loop(Conn, S, Send)
+        {bridge, Conn, ssl} ->
+            .io:format("Upgrading to SSL!~n", []),
+            {ok, SslSock} = ssl:connect(S, []),
+            loop(Conn, SslSock, fun ssl:send/2);
+        {bridge, Conn, Data} ->
+            Len = byte_size(Data),
+            Send(S, <<Len:32, Data/binary>>),
+            loop(Conn, S, Send);
+        {tcp, S, <<Len:32, Data/binary>>} ->
+            receive_data(Conn, Len, Data);
+        {ssl, S, <<Len:32, Data/binary>>} ->
+            receive_data(Conn, Len, Data);
+        {tcp_closed, S} ->
+            .io:format("Closed! ~n", []),
+            Conn ! disconnect,
+            exit(normal);
+	{sslsocket, new_ssl, NewSock} ->
+	    loop(Conn, NewSock, Send);
+        _Something ->
+            .io:format("Unknown: ~p~n", [_Something]),
+            .io:format("~p~n", [S]),
+            loop(Conn, S, Send)
     end.
 %% {ok, Pid} = bridge:start_link([{api_key, "951da7fb819d0ef3"}]).
