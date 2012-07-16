@@ -52,7 +52,7 @@ dispatch(Opts) ->
 
 redirector(Opts) ->
     RedirUrl = get_val(redirector, Opts),
-    ApiKey = get_val(api_key, Opts),
+    ApiKey = atom_to_binary(get_val(api_key, Opts), utf8),
     Target = RedirUrl ++ "/redirect/" ++ [ApiKey],
     redirector_response(httpc:request(get, {Target, []}, [],
 				      [{body_format, binary}])).

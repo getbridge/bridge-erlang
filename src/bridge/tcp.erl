@@ -13,18 +13,15 @@ connect(Conn, Host, Port, Opts) ->
 send(Sock, Msg) ->
     Sock ! {bridge, self(), Msg}.
 
-receive_data(Conn, Len, Data) ->
-    .io:format("Got ~p~n", [Data]),
+receive_data(Conn, _Len, Data) ->
     Conn ! {tcp, Data}.
 
 loop(Conn, S, Send) ->
     receive
         {bridge, Conn, ssl} ->
-            .io:format("Upgrading to SSL!~n", []),
             {ok, SslSock} = ssl:connect(S, []),
             loop(Conn, SslSock, fun ssl:send/2);
         {bridge, Conn, Data} ->
-	    .io:format("Sending ~p~n~n", [Data]),
             Len = byte_size(Data),
             Send(S, <<Len:32, Data/binary>>),
             loop(Conn, S, Send);
@@ -35,7 +32,6 @@ loop(Conn, S, Send) ->
             receive_data(Conn, Len, Data),
 	    loop(Conn, S, Send);
         {tcp_closed, S} ->
-            .io:format("Closed! ~n", []),
             Conn ! disconnect,
             exit(normal);
 	{sslsocket, new_ssl, NewSock} ->

@@ -14,7 +14,7 @@ start_link(Bridge) ->
     gen_server:start({local, ?MODULE}, ?MODULE, Bridge, []).
 
 join(Room, Password, Obj, Callback, #state{bridge = Bridge}) ->
-    if Password == "secret123" ->
+    if Password == <<"secret123">> ->
 	    io:format("Welcome!"),
 	    bridge:join_channel(Bridge, {Room, Obj, true, Callback});
        true ->
@@ -22,7 +22,7 @@ join(Room, Password, Obj, Callback, #state{bridge = Bridge}) ->
     end.
 
 main() ->
-    {ok, Bridge} = bridge:new([{api_key, <<"951da7fb819d0ef3">>}, {secure, false}]),
+    {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'}, {secure, false}]),
     %% bridge:connect(Bridge),
     {ok, ChatServer} = chatserver:start_link(Bridge),
     %% The atom auth is internally stored as a liststring, either way.
@@ -32,7 +32,9 @@ init(Bridge) ->
     {ok, #state{bridge = Bridge}}.
 
 handle_cast({Method, Args}, State) ->
-    apply(?MODULE, Method, Args ++ [State]),
+    apply(?MODULE,
+	  list_to_existing_atom(binary_to_list(Method)),
+	  Args ++ [State]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->

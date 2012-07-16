@@ -23,10 +23,11 @@ join_callback(Channel, Name, Bridge) ->
 			 [steve, <<"Bridge is pretty nifty">>]}).
 
 main() ->
-    {ok, Bridge} = bridge:new([{api_key, <<"951da7fb819d0ef3">>},
+    {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'},
 			       {secure, false}]),
     %% bridge:connect(Bridge),
     {ok, ChatHandler} = chatserver:start_link(Bridge),
+    .io:format("hello, testing~n"),
     Auth = bridge:get_service(Bridge, auth),
     bridge:cast(Bridge, {Auth, join, ['bridge-lovers',
 				      'secret123',

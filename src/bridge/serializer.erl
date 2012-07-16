@@ -7,90 +7,30 @@
 -export([code_change/3, terminate/2]).
 -export([start_link/1]).
 
--export([parse_json/1, find/2, store/2]).
+-export([parse_json/1]).
 
 -import(gen_server).
 -import(erlang).
--import(random).
 -import(lists).
 
 -import(jiffy).
--import(dict).
 
 -record(state,
         { connection = undefined,
-          encode_map = dict:new(),
-          decode_map = dict:new(),
-	  client_id  = undefined,
           bridge     = undefined
         }).
-
-find([_Type, _Own, _Svc, Key], Map) ->
-    dict:find(Key, Map).
-
-store(Key, State = #state{encode_map = Enc,
-			  decode_map = Dec,
-			  client_id  = Id  }) ->
-    Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
-    Val = [client, Id] ++ 
-	if is_function(Key) ->
-		[callback];
-	   true ->
-		[]
-	end ++ [Str],
-    {{[{ref, Val}]}, State#state{encode_map = dict:store(Key, Val, Enc),
-				 decode_map = dict:store(Val, Key, Dec)}}.
-
 start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
 init(_Args = {Opts, Parent}) ->
-    {A1, A2, A3} = erlang:now(),
-    random:seed(A1, A2, A3),
+    .io:format("Starting serializer.~n"),
     {ok, Conn} = bridge.connection:start_link(Opts),
+    .io:format("Started connection.~n"),
     {ok, #state{bridge     = Parent,
                 connection = Conn}}.
 
 handle_call(_Args, _From, State) ->
     {noreply, State}.
-
-decode([], State) ->
-    {[], State};
-decode([Head | Tail], State) ->
-    {NewHead, NewState} = decode(Head, State),
-    {NewTail, FinalState} = decode(Tail, NewState),
-    {[NewHead | NewTail], FinalState};
-decode({ref, Term}, State = #state{decode_map = Map}) when is_list(Term) ->
-    case find(Term, Map) of
-        error ->
-            {undefined, State};
-        {ok, Value} ->
-            {Value, State}
-    end;
-decode(Data, State) ->
-    {Data, State}.
-
-
-encode([], State) ->
-    {[], State};
-encode([Head | Tail], State) ->
-    {NewHead, NewState} = encode(Head, State),
-    {NewTail, FinalState} = encode(Tail, NewState),
-    {[NewHead | NewTail], FinalState};
-
-encode({[]}, State) ->
-    {{[]}, State};
-encode({[{_Head, undefined} | Tail]}, State) ->
-    encode({Tail}, State);
-encode({[{Key, V} | Tail]}, State) ->
-    {NewV, NewState} = encode(V, State),
-    {{NewTail}, FinalState} = encode({Tail}, NewState),
-    {{[{Key, NewV} | NewTail]}, FinalState};
-encode(Data, State) when is_function(Data) orelse is_pid(Data) ->
-    store(Data, State);
-encode(Data, State) ->
-    {Data, State}.
-
 
 handle_cast({connect, Data}, State = #state{connection = Conn}) ->
     gen_server:cast(Conn, {connect, jiffy:encode(Data)}),
@@ -98,14 +38,12 @@ handle_cast({connect, Data}, State = #state{connection = Conn}) ->
 handle_cast(Msg = {connect_response, {_Id, _Secret}},
             State = #state{bridge = Bridge}) ->
     gen_server:cast(Bridge, Msg),
-    {noreply, State#state{client_id = list_to_binary(_Id)}};
+    {noreply, State};
 handle_cast({encode, {Op, Args}}, State = #state{connection = Conn}) ->
-    {Encoded, NewState} = encode({[{command, Op}, {data, Args}]}, State),
-    gen_server:cast(Conn, jiffy:encode(Encoded)),
-    {noreply, NewState};
+    gen_server:cast(Conn, jiffy:encode({[{command, Op}, {data, Args}]})),
+    {noreply, State};
 handle_cast({decode, Data}, State = #state{bridge = Core}) ->
-    {Decoded, State} = decode(jiffy:decode(Data), State),
-    gen_server:cast(Core, Decoded),
+    gen_server:cast(Core, jiffy:decode(Data)),
     {noreply, State}.
 
 handle_info({Conn, _Info}, State = #state{connection = Conn,
