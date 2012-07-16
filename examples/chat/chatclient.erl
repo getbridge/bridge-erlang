@@ -19,20 +19,20 @@ message(Sender, Message, _State) ->
 join_callback(Channel, Name, Bridge) -> 
     io:format("Joined channel : ~p~n", [Name]),
     bridge:cast(Bridge, {Channel,
-			 message,
-			 [steve, <<"Bridge is pretty nifty">>]}).
+                         message,
+                         [steve, <<"Bridge is pretty nifty">>]}).
 
 main() ->
     {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'},
-			       {secure, false}]),
+                               {secure, false}]),
     %% bridge:connect(Bridge),
     {ok, ChatHandler} = chatserver:start_link(Bridge),
     .io:format("hello, testing~n"),
     Auth = bridge:get_service(Bridge, auth),
     bridge:cast(Bridge, {Auth, join, ['bridge-lovers',
-				      'secret123',
-				      ChatHandler,
-				      fun join_callback/3]}).
+                                      'secret123',
+                                      ChatHandler,
+                                      fun join_callback/3]}).
 
 init(Bridge) ->
     {ok, #state{bridge = Bridge}}.

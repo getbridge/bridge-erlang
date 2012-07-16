@@ -67,23 +67,21 @@ handle_cast({add_handler, Mod}, _State) ->
     {noreply, NewState};
 handle_cast({_Data}, S) ->
     {Data, S} = decode(_Data, S),
-    .io:format("CASTED data: ~p~n", [Data]),
     {{[{Dest, Method}]}, Args} = {proplists:get_value(<<"destination">>, Data),
-		    proplists:get_value(<<"args">>, Data)},
+                                  proplists:get_value(<<"args">>, Data)},
     if is_function(Dest) ->
-	    apply(Dest, Args);
+            apply(Dest, Args);
        true ->
-	    .io:format("dest: ~p, method: ~p~n", [Dest, Method]),
-	    gen_server:cast(Dest, {Method, Args})
+            gen_server:cast(Dest, {Method, Args})
     end,
     {noreply, S};
 handle_cast({connect_response, {Id, Secret}}, State = #state{buffer = Buf}) ->
     %% Flush queue.
     .io:format("Flushing ~p entries~n", [length(Buf)]),
     NewState = lists:foldr(fun(Elem, AccIn) -> Elem(AccIn) end,
-			   State#state{ client_id = Id, secret = Secret,
-					connected = true, buffer = []},
-			   Buf),
+                           State#state{ client_id = Id, secret = Secret,
+                                        connected = true, buffer = []},
+                           Buf),
     {noreply, NewState};
 handle_cast(connect, State) ->
     connect(State),
@@ -112,19 +110,19 @@ code_change(_OldVsn, State, _Extra) ->
 send_command(Op, Args, _State = #state{serializer = S, connected = false,
                                        buffer = Buf}) ->
     case Op of
-	'JOINWORKERPOOL' ->
-	    State = bind_args(<<"named">>, Args, _State);
-	'JOINCHANNEL' ->
-	    State = bind_args(<<"channel">>, Args, _State);
-	_ ->
-	    State = _State
+        'JOINWORKERPOOL' ->
+            State = bind_args(<<"named">>, Args, _State);
+        'JOINCHANNEL' ->
+            State = bind_args(<<"channel">>, Args, _State);
+        _ ->
+            State = _State
     end,
     State#state{
       buffer = [ fun(CurrState) ->
-			 {Encoded, NewState} = encode(Args, CurrState),
-			 gen_server:cast(S, {encode, {Op, Encoded}}),
-			 NewState
-		 end | Buf ]
+                         {Encoded, NewState} = encode(Args, CurrState),
+                         gen_server:cast(S, {encode, {Op, Encoded}}),
+                         NewState
+                 end | Buf ]
      };
 send_command(Op, Args, State = #state{serializer = S}) ->
     gen_server:cast(S, {encode, {Op, Args}}),
@@ -138,28 +136,23 @@ bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
     Name = atom_to_binary(proplists:get_value(name, Args), utf8),
     Handler = proplists:get_value(handler, Args),
     Id = case Type of
-	     <<"named">> ->
-		 Name;
-	     <<"channel">> ->
-		 <<"channel:", Name/binary>>
-	 end,
+             <<"named">> ->
+                 Name;
+             <<"channel">> ->
+                 <<"channel:", Name/binary>>
+         end,
     _State#state{decode_map = dict:store([Type, Id, Name], Handler, Dec)}.
 
 find(Key, Map) ->
     dict:find(Key, Map).
 
 store(Key, State = #state{encode_map = Enc,
-			  decode_map = Dec,
-			  client_id  = Id  }) ->
+                          decode_map = Dec,
+                          client_id  = Id  }) ->
     Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
-    Val = [client, list_to_binary(Id)] ++ 
-	if is_function(Key) ->
-		[callback];
-	   true ->
-		[]
-	end ++ [Str],
+    Val = [client, list_to_binary(Id), Str],
     {{[{ref, Val}]}, State#state{encode_map = dict:store(Key, Val, Enc),
-				 decode_map = dict:store(Val, Key, Dec)}}.
+                                 decode_map = dict:store(Val, Key, Dec)}}.
 
 
 decode([], State) ->
@@ -171,22 +164,22 @@ decode([Head | Tail], State) ->
 decode({<<"ref">>, T}, State = #state{decode_map = Map}) when is_list(T) ->
     case find(T, Map) of
         error ->
-	    {Root, Method} = {lists:sublist(T, 3), lists:last(T)},
-	    if Root == T ->
-		    {{<<"ref">>, T}, State};
-	       true ->
-		    {Decoded, State} = decode({<<"ref">>, Root}, State),
-		    if is_tuple(Decoded) ->
-			    {<<"ref">>, Lst} = Decoded,
-			    {{<<"ref">>, Lst ++ [Method]}, State};
-		       true ->
-			    {{Decoded, Method}, State}
-		    end
-	    end;
+            {Root, Method} = {lists:sublist(T, 3), lists:last(T)},
+            if Root == T ->
+                    {{<<"ref">>, T}, State};
+               true ->
+                    {Decoded, State} = decode({<<"ref">>, Root}, State),
+                    if is_tuple(Decoded) ->
+                            {<<"ref">>, Lst} = Decoded,
+                            {{<<"ref">>, Lst ++ [Method]}, State};
+                       true ->
+                            {{Decoded, Method}, State}
+                    end
+            end;
         {ok, Value} ->
             {Value, State};
-	_Something ->
-	    .io:format("Something unexpected found: ~p~n", [_Something])
+        _Something ->
+            .io:format("Something unexpected found: ~p~n", [_Something])
     end;
 decode({_Key, Term}, State) ->
     {Value, State} = decode(Term, State),

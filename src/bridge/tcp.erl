@@ -27,15 +27,15 @@ loop(Conn, S, Send) ->
             loop(Conn, S, Send);
         {tcp, S, <<Len:32, Data/binary>>} ->
             receive_data(Conn, Len, Data),
-	    loop(Conn, S, Send);
+            loop(Conn, S, Send);
         {ssl, S, <<Len:32, Data/binary>>} ->
             receive_data(Conn, Len, Data),
-	    loop(Conn, S, Send);
+            loop(Conn, S, Send);
         {tcp_closed, S} ->
             Conn ! disconnect,
             exit(normal);
-	{sslsocket, new_ssl, NewSock} ->
-	    loop(Conn, NewSock, Send);
+        {sslsocket, new_ssl, NewSock} ->
+            loop(Conn, NewSock, Send);
         _Something ->
             .io:format("Unknown: ~p~n", [_Something]),
             .io:format("~p~n", [S]),

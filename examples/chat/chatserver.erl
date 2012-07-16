@@ -15,10 +15,10 @@ start_link(Bridge) ->
 
 join(Room, Password, Obj, Callback, #state{bridge = Bridge}) ->
     if Password == <<"secret123">> ->
-	    io:format("Welcome!"),
-	    bridge:join_channel(Bridge, {Room, Obj, true, Callback});
+            io:format("Welcome!"),
+            bridge:join_channel(Bridge, {Room, Obj, true, Callback});
        true ->
-	    io:format("Sorry!")
+            io:format("Sorry!")
     end.
 
 main() ->
@@ -33,8 +33,8 @@ init(Bridge) ->
 
 handle_cast({Method, Args}, State) ->
     apply(?MODULE,
-	  list_to_existing_atom(binary_to_list(Method)),
-	  Args ++ [State]),
+          list_to_existing_atom(binary_to_list(Method)),
+          Args ++ [State]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->

@@ -41,9 +41,9 @@ publish_service(Pid, {SvcName, Handler}) ->
     publish_service(Pid, {SvcName, Handler, undefined});
 publish_service(Pid, {SvcName, Handler, Callback}) ->
     send_command(Pid, 'JOINWORKERPOOL',
-		 {[{name, SvcName},
-		   {handler, Handler},
-		   {callback, Callback}]}).
+                 {[{name, SvcName},
+                   {handler, Handler},
+                   {callback, Callback}]}).
 
 join_channel(Pid, {ChannelName, Handler}) ->
     join_channel(Pid, {ChannelName, Handler, true, undefined});
@@ -53,26 +53,26 @@ join_channel(Pid, {ChannelName, Handler, Callback}) ->
     join_channel(Pid, {ChannelName, Handler, true, Callback});
 join_channel(Pid, {ChannelName, Handler, Write, Callback}) ->
     send_command(Pid, 'JOINCHANNEL',
-		 {[{name, ChannelName},
-		   {handler, Handler},
-		   {callback, Callback},
-		   {writeable, Write}]}).
+                 {[{name, ChannelName},
+                   {handler, Handler},
+                   {callback, Callback},
+                   {writeable, Write}]}).
 
 leave_service(Pid, {SvcName, Handler}) ->
     leave_service(Pid, {SvcName, Handler, undefined});
 leave_service(Pid, {SvcName, Handler, Callback}) ->
     send_command(Pid, 'LEAVEWORKERPOOL',
-		 {[{name, SvcName},
-		   {handler, Handler},
-		   {callback, Callback}]}).
+                 {[{name, SvcName},
+                   {handler, Handler},
+                   {callback, Callback}]}).
 
 leave_channel(Pid, {ChannelName, Handler}) ->
     leave_channel(Pid, {ChannelName, Handler, undefined});
 leave_channel(Pid, {ChannelName, Handler, Callback}) ->
     send_command(Pid, 'LEAVECHANNEL',
-		 {[{name, ChannelName},
-		   {handler, Handler},
-		   {callback, Callback}]}).
+                 {[{name, ChannelName},
+                   {handler, Handler},
+                   {callback, Callback}]}).
 
 %% Service name is provided as an atom, probably.
 get_service(_Bridge, SvcName) when SvcName =/= system ->

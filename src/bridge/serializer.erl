@@ -46,8 +46,7 @@ handle_cast({decode, Data}, State = #state{bridge = Core}) ->
     gen_server:cast(Core, jiffy:decode(Data)),
     {noreply, State}.
 
-handle_info({Conn, _Info}, State = #state{connection = Conn,
-                                          bridge = Bridge}) ->
+handle_info({_C, _Info}, State = #state{connection = _C, bridge = Bridge}) ->
     Bridge ! {self(), _Info},
     {noreply, State};
 handle_info(_Request, State) ->
