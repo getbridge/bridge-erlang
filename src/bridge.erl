@@ -18,14 +18,17 @@ new(Opts) -> bridge.core:start_link(Opts).
 connect(Pid) ->
     gen_server:cast(Pid, connect).
 
--spec bridge:create_ref([any()]) -> {[{ref, [any()]}]}.
-create_ref(Lst) ->
-    {[{ref, Lst}]}.
+-spec bridge:create_ref([any()], any()) -> {[{ref, [any()]}]}.
+create_ref(Ref, Method) ->
+    append_ref(Ref, Method).
 
 %% Ex: bridge:cast(BridgePid, {get_service(auth), join, Args = [term()]})
--spec bridge:cast(pid(), {atom(), atom(), [any()]}) -> ok.
+cast(_Pid, {Svc, _Method, Args}) when is_function(Svc) ->
+    erlang:apply(Svc, Args ++ [_Pid]);
+cast(_Pid, {Svc, Method, Args}) when is_pid(Svc) ->
+    gen_server:cast(Svc, {Method, Args});
 cast(Pid, {Svc, Method, Args}) ->
-    Ref = create_ref(Svc ++ [Method]),
+    Ref = create_ref(Svc, Method),
     send_command(Pid, 'SEND', {[{destination, Ref}, {args, Args}]}).
 
 -spec bridge:add_handler(pid(), atom) -> ok.
@@ -76,13 +79,16 @@ leave_channel(Pid, {ChannelName, Handler, Callback}) ->
 
 %% Service name is provided as an atom, probably.
 get_service(_Bridge, SvcName) when SvcName =/= system ->
-    [named, SvcName, SvcName];
+    {[{ref, [named, SvcName, SvcName]}]};
 get_service(_Bridge, {Client, SvcName}) when SvcName =/= system ->
-    Client ++ [SvcName].
+    append_ref(Client, SvcName).
 
 get_channel(Bridge, ChannelName) ->
     send_command(Bridge, 'GETCHANNEL', {[{name, ChannelName}]}),
-    [channel, ChannelName, <<"channel:", ChannelName/binary>>].
+    {[{ref, [channel, ChannelName, <<"channel:", ChannelName/binary>>]}]}.
+
+append_ref({[{ref, Ref}]}, Element) ->
+    {[{ref, Ref ++ [Element]}]}.
 
 context(Bridge) ->
     gen_server:call(Bridge, context).

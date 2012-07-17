@@ -13,6 +13,8 @@
 -import(lists).
 -import(dict).
 
+-import(bridge).
+
 -record(state,
         { opts          = [],
           buffer        = [],
@@ -59,28 +61,30 @@ connect(State = #state{api_key=Key, client_id = Id,
                        }),
     {ok, State}.
 
-handle_cast({outbound, {Op, Data}}, _State) ->
-    NewState = send_command(Op, Data, _State),
+handle_cast({outbound, {Op, Data}}, S) ->
+    NewState = send_command(Op, Data, S),
     {noreply, NewState};
-handle_cast({add_handler, Mod}, _State) ->
-    {ok, NewState} = add_handler(Mod, _State),
+handle_cast({add_handler, Mod}, S) ->
+    {ok, NewState} = add_handler(Mod, S),
     {noreply, NewState};
 handle_cast({_Data}, S) ->
     {Data, S} = decode(_Data, S),
-    {{[{Dest, Method}]}, Args} = {proplists:get_value(<<"destination">>, Data),
-                                  proplists:get_value(<<"args">>, Data)},
-    if is_function(Dest) ->
-            apply(Dest, Args);
-       true ->
-            gen_server:cast(Dest, {Method, Args})
+    {Dst, Args} = {proplists:get_value(<<"destination">>, Data),
+		   proplists:get_value(<<"args">>, Data)},
+    case Dst of
+	{[{<<"ref">>, _Dest}]} ->
+	    {Dest, Method} = {lists:sublist(_Dest, 3), lists:last(_Dest)};
+	{Dest, Method} ->
+	    ok
     end,
-    {noreply, S};
+    Src = proplists:get_value(<<"source">>, Data, {[{undefined, 0}]}),
+    State = invoke(Dest, Method, Args, S),
+    {noreply, State#state{context = Src}};
 handle_cast({connect_response, {Id, Secret}}, State = #state{buffer = Buf}) ->
     %% Flush queue.
-    .io:format("Flushing ~p entries~n", [length(Buf)]),
     NewState = lists:foldr(fun(Elem, AccIn) -> Elem(AccIn) end,
                            State#state{ client_id = Id, secret = Secret,
-                                        connected = true, buffer = []},
+                                        connected = true, buffer = [] },
                            Buf),
     {noreply, NewState};
 handle_cast(connect, State) ->
@@ -109,13 +113,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 send_command(Op, Args, _State = #state{serializer = S, connected = false,
                                        buffer = Buf}) ->
-    case Op of
-        'JOINWORKERPOOL' ->
-            State = bind_args(<<"named">>, Args, _State);
-        'JOINCHANNEL' ->
-            State = bind_args(<<"channel">>, Args, _State);
-        _ ->
-            State = _State
+    if Op == 'JOINWORKERPOOL' -> State = bind_args(<<"named">>, Args, _State);
+       true -> State = _State
     end,
     State#state{
       buffer = [ fun(CurrState) ->
@@ -131,17 +130,53 @@ send_command(Op, Args, State = #state{serializer = S}) ->
 context(#state{context = Context}) ->
     Context.
 
+invoke(Dest, Method, Args, S) ->
+    if is_function(Dest) ->
+            apply(Dest, Args),
+	    S;
+       is_pid(Dest) ->
+	    gen_server:cast(Dest, {to_atom(Method), Args}),
+	    S;
+       is_list(Dest) ->
+	    case lists:nth(3, Dest) of
+		<<"system">> ->
+		    syscall(Method, Args, S);
+		_NoClue ->
+		    bridge:cast(self(), {Method, Args}),
+		    S
+	    end
+    end.
+
+to_atom(Item) ->
+    if is_binary(Item) ->
+	    erlang:binary_to_existing_atom(Item, utf8);
+       is_atom(Item) ->
+	    Item;
+       true ->
+	    undefined
+    end.
+
+to_binary(Name) ->
+    if is_atom(Name) ->
+	    atom_to_binary(Name, utf8);
+       is_binary(Name) ->
+	    Name;
+       is_list(Name) ->
+	    list_to_binary(Name);
+       true ->
+	    <<"unknown_name">>
+    end.
 
 bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
-    Name = atom_to_binary(proplists:get_value(name, Args), utf8),
+    Name = to_binary(proplists:get_value(name, Args)),
     Handler = proplists:get_value(handler, Args),
     Id = case Type of
              <<"named">> ->
                  Name;
              <<"channel">> ->
                  <<"channel:", Name/binary>>
-         end,
-    _State#state{decode_map = dict:store([Type, Id, Name], Handler, Dec)}.
+	 end,
+    _State#state{decode_map = dict:store([Type, Name, Id], Handler, Dec)}.
 
 find(Key, Map) ->
     dict:find(Key, Map).
@@ -150,7 +185,7 @@ store(Key, State = #state{encode_map = Enc,
                           decode_map = Dec,
                           client_id  = Id  }) ->
     Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
-    Val = [client, list_to_binary(Id), Str],
+    Val = [<<"client">>, list_to_binary(Id), Str],
     {{[{ref, Val}]}, State#state{encode_map = dict:store(Key, Val, Enc),
                                  decode_map = dict:store(Val, Key, Dec)}}.
 
@@ -161,17 +196,20 @@ decode([Head | Tail], State) ->
     {NewHead, State} = decode(Head, State),
     {NewTail, State} = decode(Tail, State),
     {[NewHead | NewTail], State};
-decode({<<"ref">>, T}, State = #state{decode_map = Map}) when is_list(T) ->
+decode({[{<<"ref">>, T}]}, State = #state{decode_map = Map}) when is_list(T) ->
     case find(T, Map) of
         error ->
             {Root, Method} = {lists:sublist(T, 3), lists:last(T)},
+	    Svc = lists:last(Root),
             if Root == T ->
-                    {{<<"ref">>, T}, State};
+                    {{[{<<"ref">>, T}]}, State};
+	       Svc == <<"system">> ->
+		    {{Root, Method}, State};
                true ->
-                    {Decoded, State} = decode({<<"ref">>, Root}, State),
+                    {Decoded, State} = decode({[{<<"ref">>, Root}]}, State),
                     if is_tuple(Decoded) ->
-                            {<<"ref">>, Lst} = Decoded,
-                            {{<<"ref">>, Lst ++ [Method]}, State};
+                            {[{<<"ref">>, Lst}]} = Decoded,
+                            {{[{<<"ref">>, Lst ++ [Method]}]}, State};
                        true ->
                             {{Decoded, Method}, State}
                     end
@@ -179,7 +217,7 @@ decode({<<"ref">>, T}, State = #state{decode_map = Map}) when is_list(T) ->
         {ok, Value} ->
             {Value, State};
         _Something ->
-            .io:format("Something unexpected found: ~p~n", [_Something])
+            {error, error}
     end;
 decode({_Key, Term}, State) ->
     {Value, State} = decode(Term, State),
@@ -211,3 +249,22 @@ encode(Data, State) when is_function(Data) orelse is_pid(Data) ->
 encode(Data, State) ->
     {Data, State}.
 
+syscall(<<"hookChannelHandler">>, [Name, Handler], State) ->
+    syscall(<<"hookChannelHandler">>, [Name, Handler, undefined], State);
+syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _State) ->
+    State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]},
+		      _State),
+    if Func == undefined -> ok;
+       true -> 
+	    Args = [{[{ref, [channel, Name, <<"channel:", Name/binary>>]}]},
+		    Name],
+	    bridge:cast(self(), {Func, callback, Args})
+    end,
+    State;
+syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
+    bridge:cast(self(), { Func, callback,
+			  [find(["named", Name, Name], Map), Name] }),
+    _State;
+syscall(<<"remoteError">>, [Msg], _State) ->
+    self() ! {error, {remote_error, Msg}},
+    _State.

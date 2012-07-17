@@ -85,7 +85,6 @@ handle_cast({connect, Data}, {State, Options}) ->
                 true -> Sock ! {bridge, self(), ssl};
                 _    -> ok
             end,
-            .io:format("DATA: ~p~n", [Data]),
             bridge.tcp:send(Sock, Data),
             {noreply, State#state{socket = Sock}};
         Msg -> {error, {redirector, Msg}}
