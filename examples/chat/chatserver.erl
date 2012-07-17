@@ -25,7 +25,7 @@ join(Room, Password, Obj, Callback, #state{bridge = Bridge}) ->
     end.
 
 main() ->
-    {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'}, {secure, false}]),
+    {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'}, {secure, true}]),
     %% bridge:connect(Bridge),
     {ok, ChatServer} = chatserver:start_link(Bridge),
     %% The atom auth is internally stored as a liststring, either way.

@@ -1,44 +1,56 @@
 -module(bridge.tcp).
--export([send/2, connect/4, receive_data/3]).
+-export([send/2, connect/5, receive_data/3]).
 -import(gen_tcp).
 -import(erlang).
+-import(binary).
 -import(ssl).
 
 %% Pseudo-transport layer (interfaces directly with TCP).
 
-connect(Conn, Host, Port, Opts) ->
-    {ok, Sock} = gen_tcp:connect(Host, Port, Opts),
-    loop(Conn, Sock, fun gen_tcp:send/2).
+connect(Conn, Secure, Host, Port, Opts) ->
+    if Secure ->
+	    Mod = ssl;
+       true ->
+	    Mod = gen_tcp
+    end,
+    {ok, Sock} = Mod:connect(Host, Port, Opts),
+    loop(Conn, Sock, fun Mod:send/2, []).
 
 send(Sock, Msg) ->
     Sock ! {bridge, self(), Msg}.
 
-receive_data(Conn, _Len, Data) ->
-    Conn ! {tcp, Data}.
+receive_data(Conn, Buf, Data) ->
+    Bin = list_to_binary(Buf ++ [Data]),
+    if byte_size(Bin) > 4 ->
+	    <<Len:32, Msg/binary>> = Bin,
+	    if Len >= erlang:byte_size(Msg) ->
+		    Conn ! {tcp, binary:part(Msg, 0, Len)},
+		    [binary:part(Msg, Len, erlang:byte_size(Msg) - Len)];
+	       true ->
+		    [Msg]
+	    end;
+       true ->
+	    [Bin]
+    end.
 
-loop(Conn, S, Send) ->
+loop(Conn, S, Send, Buf) ->
     receive
-        {bridge, Conn, ssl} ->
-            {ok, SslSock} = ssl:connect(S, []),
-            loop(Conn, SslSock, fun ssl:send/2);
         {bridge, Conn, Data} ->
             Len = byte_size(Data),
             Send(S, <<Len:32, Data/binary>>),
-            loop(Conn, S, Send);
-        {tcp, S, <<Len:32, Data/binary>>} ->
-            receive_data(Conn, Len, Data),
-            loop(Conn, S, Send);
-        {ssl, S, <<Len:32, Data/binary>>} ->
-            receive_data(Conn, Len, Data),
-            loop(Conn, S, Send);
+            loop(Conn, S, Send, Buf);
+        {tcp, S, Data} ->
+            loop(Conn, S, Send, receive_data(Conn, Buf, Data));
+        {ssl, S, Data} ->
+            loop(Conn, S, Send, receive_data(Conn, Buf, Data));
         {tcp_closed, S} ->
             Conn ! disconnect,
             exit(normal);
-        {sslsocket, new_ssl, NewSock} ->
-            loop(Conn, NewSock, Send);
+        {ssl_closed, S} ->
+            Conn ! disconnect,
+            exit(normal);
         _Something ->
             .io:format("Unknown: ~p~n", [_Something]),
             .io:format("~p~n", [S]),
-            loop(Conn, S, Send)
+            loop(Conn, S, Send, Buf)
     end.
-%% {ok, Pid} = bridge:start_link([{api_key, "951da7fb819d0ef3"}]).

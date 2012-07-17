@@ -38,7 +38,8 @@ init({Opts, Serializer}) ->
         true ->
             ssl:start(),
             Options = [{redirector, get_val(secure_redirector, Opts)} | Opts];
-        _ -> Options = Opts
+        _ ->
+	    Options = Opts
     end,
     {ok, {#state{serializer=Serializer}, Options}}.
 
@@ -47,7 +48,7 @@ dispatch(Opts) ->
     case {get_val(host, Opts), get_val(port, Opts)} of
         {undefined, _} -> redirector(Opts);
         {_, undefined} -> redirector(Opts);
-        {Host, Port}   -> connect(Host, Port)
+        {Host, Port}   -> connect(Host, Port, get_val(secure, Opts))
     end.
 
 redirector(Opts) ->
@@ -55,9 +56,10 @@ redirector(Opts) ->
     ApiKey = atom_to_binary(get_val(api_key, Opts), utf8),
     Target = RedirUrl ++ "/redirect/" ++ [ApiKey],
     redirector_response(httpc:request(get, {Target, []}, [],
-                                      [{body_format, binary}])).
+                                      [{body_format, binary}]),
+			Opts).
 
-redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}) ->
+redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge.serializer:parse_json(Body),
     case get_val(<<"data">>, Json) of
         undefined ->
@@ -65,14 +67,17 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}) ->
         Data ->
             connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
                     list_to_integer( binary_to_list(get_val(<<"bridge_port">>,
-                                                              Data))))
+                                                              Data))),
+		    get_val(secure, Opts)
+		   )
     end;
-redirector_response(_Res) -> {error, _Res}.
+redirector_response(_Res, _Opts) -> {error, _Res}.
 
-connect(Host, Port) ->
+connect(Host, Port, Secure) ->
     _Sock = erlang:spawn_link(bridge.tcp,
                               connect,
                               [self(),
+			       Secure,
                                Host,
                                Port,
                                [binary, {active, true}]]),
@@ -81,10 +86,6 @@ connect(Host, Port) ->
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
-            case get_val(secure, Options) of
-                true -> Sock ! {bridge, self(), ssl};
-                _    -> ok
-            end,
             bridge.tcp:send(Sock, Data),
             {noreply, State#state{socket = Sock}};
         Msg -> {error, {redirector, Msg}}

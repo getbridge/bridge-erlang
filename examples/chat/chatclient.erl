@@ -28,7 +28,7 @@ join_callback(Channel, Name, Bridge) ->
 
 main() ->
     {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'},
-                               {secure, false}]),
+                               {secure, true}]),
     %% bridge:connect(Bridge),
     {ok, ChatHandler} = ?MODULE:start_link(Bridge),
     Auth = bridge:get_service(Bridge, auth),
