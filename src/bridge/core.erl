@@ -71,12 +71,12 @@ handle_cast({add_handler, Mod}, S) ->
 handle_cast({_Data}, S) ->
     {Data, S} = decode(_Data, S),
     {Dst, Args} = {proplists:get_value(<<"destination">>, Data),
-		   proplists:get_value(<<"args">>, Data)},
+                   proplists:get_value(<<"args">>, Data)},
     case Dst of
-	{[{<<"ref">>, _Dest}]} ->
-	    {Dest, Method} = {lists:sublist(_Dest, 3), lists:last(_Dest)};
-	{Dest, Method} ->
-	    ok
+        {[{<<"ref">>, _Dest}]} ->
+            {Dest, Method} = {lists:sublist(_Dest, 3), lists:last(_Dest)};
+        {Dest, Method} ->
+            ok
     end,
     Src = proplists:get_value(<<"source">>, Data, {[{undefined, 0}]}),
     State = invoke(Dest, Method, Args, S),
@@ -133,38 +133,38 @@ context(#state{context = Context}) ->
 invoke(Dest, Method, Args, S) ->
     if is_function(Dest) ->
             apply(Dest, Args),
-	    S;
+            S;
        is_pid(Dest) ->
-	    gen_server:cast(Dest, {to_atom(Method), Args}),
-	    S;
+            gen_server:cast(Dest, {to_atom(Method), Args}),
+            S;
        is_list(Dest) ->
-	    case lists:nth(3, Dest) of
-		<<"system">> ->
-		    syscall(Method, Args, S);
-		_NoClue ->
-		    bridge:cast(self(), {Dest, Method, Args}),
-		    S
-	    end
+            case lists:nth(3, Dest) of
+                <<"system">> ->
+                    syscall(Method, Args, S);
+                _NoClue ->
+                    bridge:cast(self(), {Dest, Method, Args}),
+                    S
+            end
     end.
 
 to_atom(Item) ->
     if is_binary(Item) ->
-	    erlang:binary_to_existing_atom(Item, utf8);
+            erlang:binary_to_existing_atom(Item, utf8);
        is_atom(Item) ->
-	    Item;
+            Item;
        true ->
-	    undefined
+            undefined
     end.
 
 to_binary(Name) ->
     if is_atom(Name) ->
-	    atom_to_binary(Name, utf8);
+            atom_to_binary(Name, utf8);
        is_binary(Name) ->
-	    Name;
+            Name;
        is_list(Name) ->
-	    list_to_binary(Name);
+            list_to_binary(Name);
        true ->
-	    <<"unknown_name">>
+            <<"unknown_name">>
     end.
 
 bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
@@ -175,7 +175,7 @@ bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
                  Name;
              <<"channel">> ->
                  <<"channel:", Name/binary>>
-	 end,
+         end,
     _State#state{decode_map = dict:store([Type, Name, Id], Handler, Dec)}.
 
 find(Key, Map) ->
@@ -200,11 +200,11 @@ decode({[{<<"ref">>, T}]}, State = #state{decode_map = Map}) when is_list(T) ->
     case find(T, Map) of
         error ->
             {Root, Method} = {lists:sublist(T, 3), lists:last(T)},
-	    Svc = lists:last(Root),
+            Svc = lists:last(Root),
             if Root == T ->
                     {{[{<<"ref">>, T}]}, State};
-	       Svc == <<"system">> ->
-		    {{Root, Method}, State};
+               Svc == <<"system">> ->
+                    {{Root, Method}, State};
                true ->
                     {Decoded, State} = decode({[{<<"ref">>, Root}]}, State),
                     if is_tuple(Decoded) ->
@@ -253,17 +253,17 @@ syscall(<<"hookChannelHandler">>, [Name, Handler], State) ->
     syscall(<<"hookChannelHandler">>, [Name, Handler, undefined], State);
 syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _State) ->
     State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]},
-		      _State),
+                      _State),
     if Func == undefined -> ok;
        true -> 
-	    Args = [{[{ref, [channel, Name, <<"channel:", Name/binary>>]}]},
-		    Name],
-	    bridge:cast(self(), {Func, callback, Args})
+            Args = [{[{ref, [channel, Name, <<"channel:", Name/binary>>]}]},
+                    Name],
+            bridge:cast(self(), {Func, callback, Args})
     end,
     State;
 syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
     bridge:cast(self(), { Func, callback,
-			  [find(["named", Name, Name], Map), Name] }),
+                          [find(["named", Name, Name], Map), Name] }),
     _State;
 syscall(<<"remoteError">>, [Msg], _State) ->
     self() ! {error, {remote_error, Msg}},

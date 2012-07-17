@@ -39,7 +39,7 @@ init({Opts, Serializer}) ->
             ssl:start(),
             Options = [{redirector, get_val(secure_redirector, Opts)} | Opts];
         _ ->
-	    Options = Opts
+            Options = Opts
     end,
     {ok, {#state{serializer=Serializer}, Options}}.
 
@@ -57,7 +57,7 @@ redirector(Opts) ->
     Target = RedirUrl ++ "/redirect/" ++ [ApiKey],
     redirector_response(httpc:request(get, {Target, []}, [],
                                       [{body_format, binary}]),
-			Opts).
+                        Opts).
 
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge.serializer:parse_json(Body),
@@ -68,8 +68,8 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
             connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
                     list_to_integer( binary_to_list(get_val(<<"bridge_port">>,
                                                               Data))),
-		    get_val(secure, Opts)
-		   )
+                    get_val(secure, Opts)
+                   )
     end;
 redirector_response(_Res, _Opts) -> {error, _Res}.
 
@@ -77,7 +77,7 @@ connect(Host, Port, Secure) ->
     _Sock = erlang:spawn_link(bridge.tcp,
                               connect,
                               [self(),
-			       Secure,
+                               Secure,
                                Host,
                                Port,
                                [binary, {active, true}]]),

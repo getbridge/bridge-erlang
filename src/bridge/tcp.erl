@@ -9,9 +9,9 @@
 
 connect(Conn, Secure, Host, Port, Opts) ->
     if Secure ->
-	    Mod = ssl;
+            Mod = ssl;
        true ->
-	    Mod = gen_tcp
+            Mod = gen_tcp
     end,
     {ok, Sock} = Mod:connect(Host, Port, Opts),
     loop(Conn, Sock, fun Mod:send/2, []).
@@ -22,15 +22,15 @@ send(Sock, Msg) ->
 receive_data(Conn, Buf, Data) ->
     Bin = list_to_binary(Buf ++ [Data]),
     if byte_size(Bin) > 4 ->
-	    <<Len:32, Msg/binary>> = Bin,
-	    if Len >= erlang:byte_size(Msg) ->
-		    Conn ! {tcp, binary:part(Msg, 0, Len)},
-		    [binary:part(Msg, Len, erlang:byte_size(Msg) - Len)];
-	       true ->
-		    [Msg]
-	    end;
+            <<Len:32, Msg/binary>> = Bin,
+            if Len >= erlang:byte_size(Msg) ->
+                    Conn ! {tcp, binary:part(Msg, 0, Len)},
+                    [binary:part(Msg, Len, erlang:byte_size(Msg) - Len)];
+               true ->
+                    [Msg]
+            end;
        true ->
-	    [Bin]
+            [Bin]
     end.
 
 loop(Conn, S, Send, Buf) ->
