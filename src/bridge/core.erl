@@ -8,6 +8,7 @@
 -export([call/2]).
 
 -import(gen_server).
+-import(gen_event).
 -import(proplists).
 -import(random).
 -import(lists).
@@ -100,8 +101,7 @@ handle_info(Info, State = #state{event_handler = E}) ->
 
 
 add_handler(E, State = #state{}) ->
-    {ok, Ev} = gen_server:start(E),
-    {ok, State#state{event_handler = Ev}}.
+    {ok, State#state{event_handler = E}}.
 
 
 terminate(_Reason, _State) ->
@@ -142,7 +142,7 @@ invoke(Dest, Method, Args, S) ->
 		<<"system">> ->
 		    syscall(Method, Args, S);
 		_NoClue ->
-		    bridge:cast(self(), {Method, Args}),
+		    bridge:cast(self(), {Dest, Method, Args}),
 		    S
 	    end
     end.

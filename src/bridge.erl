@@ -18,31 +18,32 @@ new(Opts) -> bridge.core:start_link(Opts).
 connect(Pid) ->
     gen_server:cast(Pid, connect).
 
--spec bridge:create_ref([any()], any()) -> {[{ref, [any()]}]}.
+-spec bridge:create_ref({[{ref, any()}]}, any()) -> {[{ref, [any()]}]}.
 create_ref(Ref, Method) ->
     append_ref(Ref, Method).
 
 %% Ex: bridge:cast(BridgePid, {get_service(auth), join, Args = [term()]})
-cast(_Pid, {Svc, _Method, Args}) when is_function(Svc) ->
-    erlang:apply(Svc, Args ++ [_Pid]);
-cast(_Pid, {Svc, Method, Args}) when is_pid(Svc) ->
+cast(_Pid, {Svc, _Method, Args}) when is_function(Svc) andalso is_pid(_Pid) ->
+    erlang:apply(Svc, Args ++ [_Pid]),
+    ok;
+cast(_Pid, {Svc, Method, Args}) when is_pid(Svc) andalso is_pid(_Pid) ->
     gen_server:cast(Svc, {Method, Args});
-cast(Pid, {Svc, Method, Args}) ->
+cast(Pid, {Svc, Method, Args}) when is_pid(Pid) ->
     Ref = create_ref(Svc, Method),
     send_command(Pid, 'SEND', {[{destination, Ref}, {args, Args}]}).
 
 -spec bridge:add_handler(pid(), atom) -> ok.
 add_handler(Pid, E) ->
-    {ok, Ev} = gen_server:start(E),
+    {ok, Ev} = gen_event:start(E),
     ok = gen_server:cast(Pid, {add_handler, Ev}).
 
 %% Handler is some process ID that implements the gen_server API. Method
 %% invocation should be handled via
 %%        handle_cast({method_name, Args = [term()] ++ [BridgePid]}, State)
 -spec bridge:publish_service(pid(), {any()}) -> ok.
-publish_service(Pid, {SvcName, Handler}) ->
+publish_service(Pid, {SvcName, Handler}) when is_pid(Pid) ->
     publish_service(Pid, {SvcName, Handler, undefined});
-publish_service(Pid, {SvcName, Handler, Callback}) ->
+publish_service(Pid, {SvcName, Handler, Callback}) when is_pid(Pid) ->
     send_command(Pid, 'JOINWORKERPOOL',
                  {[{name, SvcName},
                    {handler, Handler},
