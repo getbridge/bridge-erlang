@@ -13,7 +13,7 @@
 -export([add_handler/3]).
 -export([cast/2]).
 
--spec new(proplist(atom(), term())) -> {ok, pid()} | {error, _}.
+-spec new(options()) -> {ok, pid()} | {error, _}.
 new(Opts) -> bridge.core:start_link(Opts).
 
 -spec connect(pid()) -> ok.

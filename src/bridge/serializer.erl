@@ -15,10 +15,13 @@
 
 -import(jiffy).
 
+-include("bridge_types.hrl").
+
 -record(state,
         { connection = undefined,
           bridge     = undefined
         }).
+
 start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
@@ -56,6 +59,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 terminate(_Reason, _State) -> ok.
 
+-spec parse_json(binary()) -> json().
 parse_json(Binary) ->
     jiffy:decode(Binary).
 

@@ -5,10 +5,11 @@
 -import(binary).
 -import(ssl).
 
--include("bridge_types.hrl").
+-include("json_types.hrl").
+-include("tcp_types.hrl").
 %% Pseudo-transport layer (interfaces directly with TCP).
 
--spec connect(pid(), boolean(), string(), port(), proplist(atom(), any())) ->
+-spec connect(pid(), boolean(), str(), port_number(), proplist(atom(), any())) ->
 		     no_return().
 connect(Conn, Secure, Host, Port, Opts) ->
     if Secure ->
@@ -25,7 +26,7 @@ send(Sock, Msg) ->
 
 -spec receive_data(pid(), [binary()], binary()) -> no_return().
 receive_data(Conn, Buf, Data) ->
-    Bin = list_to_binary(Buf ++ [Data]),
+    Bin = list_to_binary([Buf, Data]),
     if byte_size(Bin) > 4 ->
             <<Len:32, Msg/binary>> = Bin,
             if Len >= erlang:byte_size(Msg) ->

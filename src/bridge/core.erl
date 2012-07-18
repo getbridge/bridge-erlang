@@ -142,7 +142,8 @@ invoke(Dest, Method, Args, S) ->
                 <<"system">> ->
                     syscall(Method, Args, S);
                 _NoClue ->
-                    bridge:cast(self(), {Dest, Method, Args}),
+		    %% we don't have this method...?
+                    %% bridge:cast(self(), {Dest, Method, Args}),
                     S
             end
     end.
@@ -215,9 +216,7 @@ decode({[{<<"ref">>, T}]}, State = #state{decode_map = Map}) when is_list(T) ->
                     end
             end;
         {ok, Value} ->
-            {Value, State};
-        _Something ->
-            {error, error}
+            {Value, State}
     end;
 decode({_Key, Term}, State) ->
     {Value, State} = decode(Term, State),
