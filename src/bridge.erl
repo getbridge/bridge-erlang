@@ -50,7 +50,6 @@ add_handler(Pid, E, Args) when is_pid(Pid) andalso is_atom(E) ->
 		     (pid(), {atom(), service(), service()}) -> ok.
 publish_service(Pid, {SvcName, Handler}) when is_pid(Pid) andalso
 					      is_atom(SvcName)    ->
-    true = is_service(Handler),
     publish_service(Pid, {SvcName, Handler, undefined});
 publish_service(Pid, {SvcName, Handler, Callback}) when is_pid(Pid) andalso
 							is_atom(SvcName) ->
@@ -100,10 +99,10 @@ leave_channel(Pid, {ChannelName, Handler, Callback}) ->
 %% Service name is provided as an atom, probably.
 -spec get_service(pid(), atom())                     -> remote_service();
 		 (pid(), {remote_service(), atom()}) -> remote_service().
-get_service(_Bridge, SvcName) when SvcName =/= system ->
-    create_ref([named, SvcName, SvcName]);
 get_service(_Bridge, {Client, SvcName}) when SvcName =/= system ->
-    append_ref(Client, SvcName).
+    append_ref(Client, SvcName);
+get_service(_Bridge, SvcName) when SvcName =/= system ->
+    create_ref([named, SvcName, SvcName]).
 
 -spec get_channel(pid(), atom()) -> remote_service().
 get_channel(Bridge, ChannelName) when is_pid(Bridge) andalso

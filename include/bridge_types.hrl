@@ -12,9 +12,9 @@
 
 -type remote_service() :: {proplist(ref, [json_key()])}.
 
--type service() :: remote_service()
-		 | function()
+-type service() :: function()
 		 | pid()
+		 | remote_service()
 		 | undefined.
 
 -type options() :: proplist(atom(), any()).

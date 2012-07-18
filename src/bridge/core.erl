@@ -111,16 +111,17 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-send_command(Op, Args, _State = #state{serializer = S, connected = false,
+send_command(Op, Args, State = #state{serializer = S, connected = false,
                                        buffer = Buf}) ->
-    if Op == 'JOINWORKERPOOL' -> State = bind_args(<<"named">>, Args, _State);
-       true -> State = _State
-    end,
     State#state{
       buffer = [ fun(CurrState) ->
                          {Encoded, NewState} = encode(Args, CurrState),
                          gen_server:cast(S, {encode, {Op, Encoded}}),
-                         NewState
+			 if Op == 'JOINWORKERPOOL' ->
+				 bind_args(<<"named">>, Args, NewState);
+			    true ->
+				 NewState
+			 end
                  end | Buf ]
      };
 send_command(Op, Args, State = #state{serializer = S}) ->
@@ -168,7 +169,7 @@ to_binary(Name) ->
             <<"unknown_name">>
     end.
 
-bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
+bind_args(Type, {Args}, S = #state{decode_map = Dec, client_id = Self}) ->
     Name = to_binary(proplists:get_value(name, Args)),
     Handler = proplists:get_value(handler, Args),
     Id = case Type of
@@ -177,7 +178,9 @@ bind_args(Type, {Args}, _State = #state{decode_map = Dec}) ->
              <<"channel">> ->
                  <<"channel:", Name/binary>>
          end,
-    _State#state{decode_map = dict:store([Type, Name, Id], Handler, Dec)}.
+    Map = dict:store([Type, Name, Id], Handler, Dec),
+    S#state{decode_map = dict:store([<<"client">>, list_to_binary(Self), Id],
+				    Handler, Map)}.
 
 find(Key, Map) ->
     dict:find(Key, Map).
@@ -254,7 +257,7 @@ syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _State) ->
     State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]},
                       _State),
     if Func == undefined -> ok;
-       true -> 
+       true ->
             Args = [{[{ref, [channel, Name, <<"channel:", Name/binary>>]}]},
                     Name],
             bridge:cast(self(), {Func, callback, Args})

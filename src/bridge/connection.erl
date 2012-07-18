@@ -8,12 +8,14 @@
 -export([code_change/3, terminate/2]).
 
 -import(erlang).
--import(httpc).
--import(inets).
 -import(ssl).
 
--import(proplists).
+-import(inets).
+-import(httpc).
+
 -import(gen_server).
+
+-import(proplists).
 -import(binary).
 -import(io_lib).
 -import(lists).
@@ -63,8 +65,8 @@ dispatch(Opts) ->
 	    redirector(Opts)
     end.
 
--spec redirector(options()) -> {ok, pid()}
-			     | {error, _Reason :: term()}.
+-spec redirector(options()) ->
+			{ok, pid()} | {error, _Reason :: term()}.
 redirector(Opts) ->
     RedirUrl = get_val(redirector, Opts),
     ApiKey = atom_to_binary(get_val(api_key, Opts), utf8),
@@ -73,7 +75,8 @@ redirector(Opts) ->
                                       [{body_format, binary}]),
                         Opts).
 
--spec redirector_response(httpc_result(), options()) -> {ok, pid()} | {error, term()}.
+-spec redirector_response(httpc_result(), options()) ->
+				 {ok, pid()} | {error, term()}.
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge.serializer:parse_json(Body),
     case get_val(<<"data">>, Json) of
@@ -105,12 +108,14 @@ connect(Host, Port, Secure) ->
                                [binary, {active, true}]]),
     {ok, _Sock}.
 
+-spec handle_cast({}, {#state{}, options()}) ->
+			 {noreply, #state{}} | {stop, _Reason :: any()}.
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
             bridge.tcp:send(Sock, Data),
             {noreply, State#state{socket = Sock}};
-        Msg -> {error, {redirector, Msg}}
+        Msg -> {stop, {redirector, Msg}}
     end;
 handle_cast(Data, State = #state{socket = Sock}) ->
     Sock ! {bridge, self(), Data},

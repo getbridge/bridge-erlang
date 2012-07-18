@@ -9,7 +9,7 @@
 -include("tcp_types.hrl").
 %% Pseudo-transport layer (interfaces directly with TCP).
 
--spec connect(pid(), boolean(), str(), port_number(), proplist(atom(), any())) ->
+-spec connect(pid(), boolean(), hostname(), port_number(), proplist(atom(), any())) ->
 		     no_return().
 connect(Conn, Secure, Host, Port, Opts) ->
     if Secure ->
