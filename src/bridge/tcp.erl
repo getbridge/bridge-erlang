@@ -5,8 +5,11 @@
 -import(binary).
 -import(ssl).
 
+-include("bridge_types.hrl").
 %% Pseudo-transport layer (interfaces directly with TCP).
 
+-spec connect(pid(), boolean(), string(), port(), proplist(atom(), any())) ->
+		     no_return().
 connect(Conn, Secure, Host, Port, Opts) ->
     if Secure ->
             Mod = ssl;
@@ -16,9 +19,11 @@ connect(Conn, Secure, Host, Port, Opts) ->
     {ok, Sock} = Mod:connect(Host, Port, Opts),
     loop(Conn, Sock, fun Mod:send/2, []).
 
+-spec send(pid(), binary()) -> {bridge, pid(), binary()}.
 send(Sock, Msg) ->
     Sock ! {bridge, self(), Msg}.
 
+-spec receive_data(pid(), [binary()], binary()) -> no_return().
 receive_data(Conn, Buf, Data) ->
     Bin = list_to_binary(Buf ++ [Data]),
     if byte_size(Bin) > 4 ->
@@ -33,6 +38,7 @@ receive_data(Conn, Buf, Data) ->
             [Bin]
     end.
 
+-spec loop(pid(), socket(), function(), [binary()]) -> no_return().
 loop(Conn, S, Send, Buf) ->
     receive
         {bridge, Conn, Data} ->
