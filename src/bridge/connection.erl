@@ -31,7 +31,7 @@
 -include("inet_types.hrl").
 
 -spec get_val(json_key(), json_obj()) -> json();
-	     (json_key(), proplist(json_key(), _X :: term())) -> _X.
+             (json_key(), proplist(json_key(), _X :: term())) -> _X.
 get_val(Key, {PList}) ->
     proplists:get_value(Key, PList);
 get_val(Key, PList) ->
@@ -58,15 +58,15 @@ init({Opts, Serializer}) ->
 dispatch(Opts) ->
     {Host, Port} = {get_val(host, Opts), get_val(port, Opts)},
     case is_list(Host) andalso io_lib:char_list(Host)
-	andalso is_integer(Port) andalso 0 < Port andalso Port < 65536 of
-	true ->
-	    connect(Host, Port, get_val(secure, Opts));
-	false ->
-	    redirector(Opts)
+        andalso is_integer(Port) andalso 0 < Port andalso Port < 65536 of
+        true ->
+            connect(Host, Port, get_val(secure, Opts));
+        false ->
+            redirector(Opts)
     end.
 
 -spec redirector(options()) ->
-			{ok, pid()} | {error, _Reason :: term()}.
+                        {ok, pid()} | {error, _Reason :: term()}.
 redirector(Opts) ->
     RedirUrl = get_val(redirector, Opts),
     ApiKey = atom_to_binary(get_val(api_key, Opts), utf8),
@@ -76,16 +76,16 @@ redirector(Opts) ->
                         Opts).
 
 -spec redirector_response(httpc_result(), options()) ->
-				 {ok, pid()} | {error, term()}.
+                                 {ok, pid()} | {error, term()}.
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge.serializer:parse_json(Body),
     case get_val(<<"data">>, Json) of
         undefined ->
             {error, Body};
         Data ->
-	    connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
-		    parse_int(get_val(<<"bridge_port">>, Data)),
-		    get_val(secure, Opts) =:= true)
+            connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
+                    parse_int(get_val(<<"bridge_port">>, Data)),
+                    get_val(secure, Opts) =:= true)
     end;
 redirector_response(_Res, _Opts) -> {error, _Res}.
 
@@ -109,13 +109,13 @@ connect(Host, Port, Secure) ->
     {ok, _Sock}.
 
 -spec handle_cast({}, {#state{}, options()}) ->
-			 {noreply, #state{}} | {stop, _Reason :: any()}.
+                         {noreply, #state{}} | {stop, any(), #state{}}.
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
             bridge.tcp:send(Sock, Data),
             {noreply, State#state{socket = Sock}};
-        Msg -> {stop, {redirector, Msg}}
+        Msg -> {stop, {redirector, Msg}, State}
     end;
 handle_cast(Data, State = #state{socket = Sock}) ->
     Sock ! {bridge, self(), Data},

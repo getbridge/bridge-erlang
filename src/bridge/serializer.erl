@@ -28,9 +28,7 @@ start_link(Opts) ->
 
 -spec init({options(), pid()}) -> {ok, #state{}}.
 init(_Args = {Opts, Parent}) ->
-    .io:format("Starting serializer.~n"),
     {ok, Conn} = bridge.connection:start_link(Opts),
-    .io:format("Started connection.~n"),
     {ok, #state{bridge     = Parent,
                 connection = Conn}}.
 
@@ -38,13 +36,13 @@ handle_call(_Args, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast({connect, json_obj()}, #state{}) ->
-			 {noreply, #state{}};
-		 ({connect_response, {binary(), binary()}}, #state{}) ->
-			 {noreply, #state{}};
-		 ({encode, {bridge_command(), json_obj()}}, #state{}) ->
-			 {noreply, #state{}};
-		 ({decode, binary()}, #state{}) ->
-			 {noreply, #state{}}.
+                         {noreply, #state{}};
+                 ({connect_response, {binary(), binary()}}, #state{}) ->
+                         {noreply, #state{}};
+                 ({encode, {bridge_command(), json_obj()}}, #state{}) ->
+                         {noreply, #state{}};
+                 ({decode, binary()}, #state{}) ->
+                         {noreply, #state{}}.
 handle_cast({connect, Data}, State = #state{connection = Conn}) ->
     gen_server:cast(Conn, {connect, jiffy:encode(Data)}),
     {noreply, State};

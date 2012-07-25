@@ -36,6 +36,7 @@ main() ->
     %% bridge:connect(Bridge),
     {ok, PingHandler} = ?MODULE:start_link(Bridge),
     bridge:publish_service(Bridge, {ping, PingHandler}),
+    bridge:connect(Bridge),
     ok.
 
 init(Bridge) ->

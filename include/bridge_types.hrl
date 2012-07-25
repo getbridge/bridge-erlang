@@ -2,19 +2,21 @@
 -include("json_types.hrl").
 
 -type bridge_command() :: 'JOINWORKERPOOL'
-			| 'JOINCHANNEL'
-			| 'LEAVEWORKERPOOL'
-			| 'LEAVECHANNEL'
-			| 'GETCHANNEL'
-			| 'CONNECT'
-			| 'SEND'.
+                        | 'JOINCHANNEL'
+                        | 'LEAVEWORKERPOOL'
+                        | 'LEAVECHANNEL'
+                        | 'GETCHANNEL'
+                        | 'CONNECT'
+                        | 'SEND'.
 
 
--type remote_service() :: {proplist(ref, [json_key()])}.
+-type remote_service() :: {[{binary(), [json_key()]}]}.
 
 -type service() :: function()
-		 | pid()
-		 | remote_service()
-		 | undefined.
+                 | pid()
+                 | remote_service()
+                 | undefined.
 
 -type options() :: proplist(atom(), any()).
+
+-define(Ref(X), {[{<<"ref">>, X}]}).

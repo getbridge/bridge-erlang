@@ -5,7 +5,12 @@
 
 -export([code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, init/1, start_link/1, terminate/2]).
--export([call/2]).
+
+-define(DEFAULT_OPTIONS,
+        [{log, 2},
+         {redirector, "http://redirector.getbridge.com"},
+         {secure_redirector, "https://redirector.getbridge.com"},
+         {secure, true}]).
 
 -import(gen_server).
 -import(gen_event).
@@ -15,83 +20,68 @@
 -import(dict).
 
 -import(bridge).
+-include("bridge_types.hrl").
 
 -record(state,
         { opts          = [],
-          buffer        = [],
+          queue         = [],
           context       = undefined,
           event_handler = undefined,
           encode_map    = dict:new(),
           decode_map    = dict:new(),
           connected     = false,
-          client_id     = null,
+          id            = null,
           secret        = null,
-          api_key,
-          serializer
+          encoder,
+          key
         }).
 
-start_link(Opts) ->
-    gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
+-spec start_link(options()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Opts) -> gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
 
-init(Options) ->
+seed() ->
     {A1, A2, A3} = erlang:now(),
-    random:seed(A1, A2, A3),
-    Opts = Options ++
-        [{log, 2},
-         {redirector, "http://redirector.getbridge.com"},
-         {secure_redirector, "https://redirector.getbridge.com"},
-         {secure, true}],
+    random:seed(A1, A2, A3).
+
+-spec init(options()) -> {ok, #state{}}.
+init(Options) ->
+    seed(),
+    Opts = Options ++ ?DEFAULT_OPTIONS,
     Key = proplists:get_value(api_key, Opts),
-    {ok, S} = bridge.serializer:start_link(Opts),
-    connect(#state{opts = Opts, serializer = S, api_key = Key}).
+    {ok, E} = bridge.serializer:start_link(Opts),
+    {ok, #state{opts = Opts, encoder = E, key = Key}}.
 
-call(Pid, {Method, Args}) when is_atom(Method) ->
-    gen_server:call(Pid, {Method, Args}).
-
+-spec handle_call(context,
+                  {pid(), any()}, #state{}) -> {reply, binary(), #state{}}.
 handle_call(context, _From, State) ->
-    {reply, context(State), State};
-handle_call(_Stuff, _From, State) ->
-    {reply, ok, State}.
+    {reply, context(State), State}.
 
-connect(State = #state{api_key=Key, client_id = Id,
-                       secret=Secret, serializer=S}) ->
-    gen_server:cast(S, {connect, {[{command, 'CONNECT'},
-                                   {data, {[{api_key, Key},
-                                            {session, [Id, Secret]}]}
-                                   }]}
-                       }),
-    {ok, State}.
+-spec connect(#state{}) -> #state{}.
+connect(State = #state{key = Key, id = Id, secret = Secret, encoder = E}) ->
+    Data = {[{api_key, Key}, {session, [Id, Secret]}]},
+    gen_server:cast(E, {connect, {[{command, 'CONNECT'}, {data, Data}]}}),
+    State.
 
 handle_cast({outbound, {Op, Data}}, S) ->
-    NewState = send_command(Op, Data, S),
-    {noreply, NewState};
+    {noreply, send_command(Op, Data, S)};
 handle_cast({add_handler, Mod}, S) ->
     {ok, NewState} = add_handler(Mod, S),
     {noreply, NewState};
 handle_cast({_Data}, S) ->
     {Data, S} = decode(_Data, S),
-    {Dst, Args} = {proplists:get_value(<<"destination">>, Data),
-                   proplists:get_value(<<"args">>, Data)},
-    case Dst of
-        {[{<<"ref">>, _Dest}]} ->
-            {Dest, Method} = {lists:sublist(_Dest, 3), lists:last(_Dest)};
-        {Dest, Method} ->
-            ok
-    end,
-    Src = proplists:get_value(<<"source">>, Data, {[{undefined, 0}]}),
+    [Dst, Args, Src] = [proplists:get_value(atom_to_binary(X, utf8), Data)
+                        || X <- [destination, args, source]],
+    {Dest, Method} = unpack_dest(Dst),
     State = invoke(Dest, Method, Args, S),
     {noreply, State#state{context = Src}};
-handle_cast({connect_response, {Id, Secret}}, State = #state{buffer = Buf}) ->
-    %% Flush queue.
-    NewState = lists:foldr(fun(Elem, AccIn) -> Elem(AccIn) end,
-                           State#state{ client_id = Id, secret = Secret,
-                                        connected = true, buffer = [] },
-                           Buf),
-    {noreply, NewState};
+handle_cast({connect_response, {Id, S}}, State = #state{queue = Q}) ->
+    {noreply,
+     lists:foldr(
+       fun(E, Acc) -> E(Acc) end,
+       State#state{id = Id, secret = S, connected = true, queue = []}, Q
+      )};
 handle_cast(connect, State) ->
-    connect(State),
-    {noreply, State}.
-
+    {noreply, connect(State)}.
 
 handle_info(_Info, State = #state{event_handler = undefined}) ->
     {noreply, State};
@@ -99,10 +89,9 @@ handle_info(Info, State = #state{event_handler = E}) ->
     gen_event:notify(E, Info),
     {noreply, State}.
 
-
+-spec add_handler(pid(), #state{}) -> {ok, #state{}}.
 add_handler(E, State = #state{}) ->
     {ok, State#state{event_handler = E}}.
-
 
 terminate(_Reason, _State) ->
     ok.
@@ -110,45 +99,44 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+-spec update_state(json_key(), [json()], #state{}) -> #state{}.
+update_state(Op, Args, State = #state{encoder = S}) ->
+    {Encoded, NewState} = encode(Args, State),
+    gen_server:cast(S, {encode, {Op, Encoded}}),
+    if Op == 'JOINWORKERPOOL' ->
+            bind_args(<<"named">>, Args, NewState);
+       true ->
+            NewState
+    end.
 
-send_command(Op, Args, State = #state{serializer = S, connected = false,
-                                       buffer = Buf}) ->
-    State#state{
-      buffer = [ fun(CurrState) ->
-                         {Encoded, NewState} = encode(Args, CurrState),
-                         gen_server:cast(S, {encode, {Op, Encoded}}),
-			 if Op == 'JOINWORKERPOOL' ->
-				 bind_args(<<"named">>, Args, NewState);
-			    true ->
-				 NewState
-			 end
-                 end | Buf ]
-     };
-send_command(Op, Args, State = #state{serializer = S}) ->
+send_command(Op, Args, State = #state{connected = false, queue = Q}) ->
+    State#state{queue = [fun(S) -> update_state(Op, Args, S) end | Q]};
+
+send_command(Op, Args, State = #state{encoder = S}) ->
     gen_server:cast(S, {encode, {Op, Args}}),
     State.
 
 context(#state{context = Context}) ->
     Context.
 
-invoke(Dest, Method, Args, S) ->
-    if is_function(Dest) ->
-            apply(Dest, Args),
-            S;
-       is_pid(Dest) ->
-            gen_server:cast(Dest, {to_atom(Method), Args}),
-            S;
-       is_list(Dest) ->
-            case lists:nth(3, Dest) of
-                <<"system">> ->
-                    syscall(Method, Args, S);
-                _NoClue ->
-		    %% we don't have this method...?
-                    %% bridge:cast(self(), {Dest, Method, Args}),
-                    S
-            end
+-spec invoke(service(), json_key(), [json()], #state{}) -> #state{}.
+invoke(Dest, _Method, Args, S) when is_function(Dest) ->
+    apply(Dest, Args),
+    S;
+invoke(Dest, Method, Args, S) when is_pid(Dest) ->
+    gen_server:cast(Dest, {to_atom(Method), Args}),
+    S;
+invoke(Dest, Method, Args, S) when is_tuple(Dest) ->
+    ?Ref(Dst) = Dest,
+    case lists:nth(3, Dst) of
+        <<"system">> ->
+            syscall(Method, Args, S);
+        _NoClue ->
+            %% we don't have this method...?
+            S
     end.
 
+-spec to_atom(binary() | atom()) -> atom().
 to_atom(Item) ->
     if is_binary(Item) ->
             erlang:binary_to_existing_atom(Item, utf8);
@@ -158,18 +146,19 @@ to_atom(Item) ->
             undefined
     end.
 
+-spec to_binary(binary() | atom() | [char()]) -> binary().
 to_binary(Name) ->
     if is_atom(Name) ->
             atom_to_binary(Name, utf8);
        is_binary(Name) ->
             Name;
        is_list(Name) ->
-            list_to_binary(Name);
+            list_to_binary(lists:map(fun to_binary/1, Name));
        true ->
             <<"unknown_name">>
     end.
 
-bind_args(Type, {Args}, S = #state{decode_map = Dec, client_id = Self}) ->
+bind_args(Type, {Args}, S = #state{decode_map = Dec, id = Self}) ->
     Name = to_binary(proplists:get_value(name, Args)),
     Handler = proplists:get_value(handler, Args),
     Id = case Type of
@@ -180,18 +169,18 @@ bind_args(Type, {Args}, S = #state{decode_map = Dec, client_id = Self}) ->
          end,
     Map = dict:store([Type, Name, Id], Handler, Dec),
     S#state{decode_map = dict:store([<<"client">>, list_to_binary(Self), Id],
-				    Handler, Map)}.
+                                    Handler, Map)}.
 
 find(Key, Map) ->
     dict:find(Key, Map).
 
 store(Key, State = #state{encode_map = Enc,
                           decode_map = Dec,
-                          client_id  = Id  }) ->
+                          id  = Id  }) ->
     Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
     Val = [<<"client">>, list_to_binary(Id), Str],
-    {{[{ref, Val}]}, State#state{encode_map = dict:store(Key, Val, Enc),
-                                 decode_map = dict:store(Val, Key, Dec)}}.
+    {?Ref(Val), State#state{encode_map = dict:store(Key, Val, Enc),
+                           decode_map = dict:store(Val, Key, Dec)}}.
 
 
 decode([], State) ->
@@ -200,26 +189,26 @@ decode([Head | Tail], State) ->
     {NewHead, State} = decode(Head, State),
     {NewTail, State} = decode(Tail, State),
     {[NewHead | NewTail], State};
-decode({[{<<"ref">>, T}]}, State = #state{decode_map = Map}) when is_list(T) ->
+decode(?Ref(T), State = #state{decode_map = Map}) when is_list(T) ->
     case find(T, Map) of
+        {ok, Value} ->
+            {Value, State};
         error ->
             {Root, Method} = {lists:sublist(T, 3), lists:last(T)},
             Svc = lists:last(Root),
             if Root == T ->
-                    {{[{<<"ref">>, T}]}, State};
+                    {?Ref(T), State};
                Svc == <<"system">> ->
                     {{Root, Method}, State};
                true ->
-                    {Decoded, State} = decode({[{<<"ref">>, Root}]}, State),
+                    {Decoded, State} = decode(?Ref(Root), State),
                     if is_tuple(Decoded) ->
-                            {[{<<"ref">>, Lst}]} = Decoded,
-                            {{[{<<"ref">>, Lst ++ [Method]}]}, State};
+                            ?Ref(Lst) = Decoded,
+                            {?Ref(Lst ++ [Method]), State};
                        true ->
                             {{Decoded, Method}, State}
                     end
-            end;
-        {ok, Value} ->
-            {Value, State}
+            end
     end;
 decode({_Key, Term}, State) ->
     {Value, State} = decode(Term, State),
@@ -257,10 +246,9 @@ syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _State) ->
     State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]},
                       _State),
     if Func == undefined -> ok;
-       true ->
-            Args = [{[{ref, [channel, Name, <<"channel:", Name/binary>>]}]},
-                    Name],
-            bridge:cast(self(), {Func, callback, Args})
+       true -> Path = [channel, Name, <<"channel:", Name/binary>>],
+               bridge:cast(self(),
+                           {Func, callback, [?Ref(Path), Name]})
     end,
     State;
 syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
@@ -270,3 +258,10 @@ syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
 syscall(<<"remoteError">>, [Msg], _State) ->
     self() ! {error, {remote_error, Msg}},
     _State.
+
+-spec unpack_dest(remote_service()) -> {service(), json_key()};
+                 ({service(), json_key()}) -> {service(), json_key()}.
+unpack_dest(?Ref(_Dest)) when is_list(_Dest) andalso
+                             length(_Dest) == 4 ->
+    {?Ref(lists:sublist(_Dest, 3)), lists:last(_Dest)};
+unpack_dest(D = {_Dest, _Method}) -> D.

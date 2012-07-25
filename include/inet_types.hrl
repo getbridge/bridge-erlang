@@ -5,10 +5,10 @@
 -type ip4_address() :: { byte(), byte(), byte(), byte() }.
 
 -type ip6_address() :: { 0..65535, 0..65535, 0..65535, 0..65535, 
-			 0..65535, 0..65535, 0..65535, 0..65535  }.
+                         0..65535, 0..65535, 0..65535, 0..65535  }.
 
 -type httpc_result() :: {status_line(), headers(), httpc_body()}
-		      | {status_code(), httpc_body()}.
+                      | {status_code(), httpc_body()}.
 
 -type httpc_body() :: string() | binary().
 

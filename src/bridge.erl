@@ -21,7 +21,7 @@ connect(Pid) ->
     gen_server:cast(Pid, connect).
 
 -spec is_service(service()) -> true.
-is_service({[ref, Lst]}) when is_list(Lst) ->
+is_service(?Ref(Lst)) when is_list(Lst) ->
     lists:all(fun(X) -> is_binary(X) orelse is_atom(X) end, Lst);
 is_service(Term) ->
     is_function(Term) orelse is_pid(Term) orelse Term =:= undefined.
@@ -47,21 +47,21 @@ add_handler(Pid, E, Args) when is_pid(Pid) andalso is_atom(E) ->
 %% invocation should be handled via
 %%     handle_cast({method_name, Args = [term()] ++ [BridgePid]}, State)
 -spec publish_service(pid(), {atom(), service()})            -> ok;
-		     (pid(), {atom(), service(), service()}) -> ok.
+                     (pid(), {atom(), service(), service()}) -> ok.
 publish_service(Pid, {SvcName, Handler}) when is_pid(Pid) andalso
-					      is_atom(SvcName)    ->
+                                              is_atom(SvcName) ->
     publish_service(Pid, {SvcName, Handler, undefined});
 publish_service(Pid, {SvcName, Handler, Callback}) when is_pid(Pid) andalso
-							is_atom(SvcName) ->
+                                                        is_atom(SvcName) ->
     true = is_service(Handler) andalso is_service(Callback),
     send_command(Pid, 'JOINWORKERPOOL',
                  {[{name,     SvcName},
                    {handler,  Handler},
                    {callback, Callback}]}).
 
--spec join_channel(pid(), {atom(), service()})                       -> ok;
-                  (pid(), {atom(), service(), boolean()})            -> ok;
-                  (pid(), {atom(), service(), service()})            -> ok;
+-spec join_channel(pid(), {atom(), service()}) ->                       ok;
+                  (pid(), {atom(), service(), boolean()}) ->            ok;
+                  (pid(), {atom(), service(), service()}) ->            ok;
                   (pid(), {atom(), service(), boolean(), service()}) -> ok.
 join_channel(Pid, {ChannelName, Handler}) ->
     join_channel(Pid, {ChannelName, Handler, true, undefined});
@@ -77,7 +77,7 @@ join_channel(Pid, {ChannelName, Handler, Write, Callback}) ->
                    {writeable, Write}]}).
 
 -spec leave_service(pid(), {atom(), service()})            -> ok;
-		   (pid(), {atom(), service(), service()}) -> ok.
+                   (pid(), {atom(), service(), service()}) -> ok.
 leave_service(Pid, {SvcName, Handler}) ->
     leave_service(Pid, {SvcName, Handler, undefined});
 leave_service(Pid, {SvcName, Handler, Callback}) ->
@@ -87,7 +87,7 @@ leave_service(Pid, {SvcName, Handler, Callback}) ->
                    {callback, Callback}]}).
 
 -spec leave_channel(pid(), {atom(), service()})            -> ok;
-		   (pid(), {atom(), service(), service()}) -> ok.
+                   (pid(), {atom(), service(), service()}) -> ok.
 leave_channel(Pid, {ChannelName, Handler}) ->
     leave_channel(Pid, {ChannelName, Handler, undefined});
 leave_channel(Pid, {ChannelName, Handler, Callback}) ->
@@ -98,18 +98,18 @@ leave_channel(Pid, {ChannelName, Handler, Callback}) ->
 
 %% Service name is provided as an atom, probably.
 -spec get_service(pid(), atom())                     -> remote_service();
-		 (pid(), {remote_service(), atom()}) -> remote_service().
+                 (pid(), {remote_service(), atom()}) -> remote_service().
 get_service(_Bridge, {Client, SvcName}) when SvcName =/= system ->
     append_ref(Client, SvcName);
 get_service(_Bridge, SvcName) when SvcName =/= system ->
-    create_ref([named, SvcName, SvcName]).
+    ?Ref([named, SvcName, SvcName]).
 
 -spec get_channel(pid(), atom()) -> remote_service().
 get_channel(Bridge, ChannelName) when is_pid(Bridge) andalso
-				      is_atom(ChannelName)   ->
+                                      is_atom(ChannelName)   ->
     send_command(Bridge, 'GETCHANNEL', {[{name, ChannelName}]}),
     BinName = erlang:atom_to_binary(ChannelName, utf8),
-    create_ref([channel, ChannelName, <<"channel:", BinName/binary>>]).
+    ?Ref([channel, ChannelName, <<"channel:", BinName/binary>>]).
 
 -spec context(pid()) -> remote_service().
 context(Bridge) ->
@@ -117,7 +117,7 @@ context(Bridge) ->
 
 -spec get_client(pid(), json_key()) -> remote_service().
 get_client(_Pid, ClientId) ->
-    create_ref([client, ClientId]).
+    ?Ref([client, ClientId]).
 
 -spec send_command(pid(), bridge_command(), json_obj()) -> ok.
 send_command(Pid, Op, Args) ->
@@ -125,9 +125,6 @@ send_command(Pid, Op, Args) ->
 
 
 -spec append_ref(remote_service(), json_key()) -> remote_service().
-append_ref({[{ref, Ref}]}, Element) ->
-    create_ref(Ref ++ [Element]).
+append_ref(?Ref(Ref), Element) ->
+    ?Ref(Ref ++ [Element]).
 
--spec create_ref([json_key()]) -> remote_service().
-create_ref(Lst) ->
-    {[{ref, Lst}]}.

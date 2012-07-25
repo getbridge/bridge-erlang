@@ -35,6 +35,7 @@ main() ->
     bridge:publish_service(Bridge, {pong, PongHandler}),
     Ping = bridge:get_service(Bridge, ping),
     bridge:cast(Bridge, {Ping, ping, []}),
+    bridge:connect(Bridge),
     ok.
 
 init(Bridge) ->
