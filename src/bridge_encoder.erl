@@ -1,4 +1,4 @@
--module(bridge.serializer).
+-module(bridge_encoder).
 -behaviour(gen_server).
 
 %% Presentation layer.
@@ -15,31 +15,29 @@
 
 -import(jiffy).
 
--include("bridge_types.hrl").
-
 -record(state,
         { connection = undefined,
           bridge     = undefined
         }).
 
--spec start_link(options()) -> {ok, pid()}.
+-spec start_link(bridge:options()) -> {ok, pid()}.
 start_link(Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
--spec init({options(), pid()}) -> {ok, #state{}}.
+-spec init({bridge:options(), pid()}) -> {ok, #state{}}.
 init(_Args = {Opts, Parent}) ->
-    {ok, Conn} = bridge.connection:start_link(Opts),
+    {ok, Conn} = bridge_connection:start_link(Opts),
     {ok, #state{bridge     = Parent,
                 connection = Conn}}.
 
 handle_call(_Args, _From, State) ->
     {noreply, State}.
 
--spec handle_cast({connect, json_obj()}, #state{}) ->
+-spec handle_cast({connect, bridge:json_obj()}, #state{}) ->
                          {noreply, #state{}};
                  ({connect_response, {binary(), binary()}}, #state{}) ->
                          {noreply, #state{}};
-                 ({encode, {bridge_command(), json_obj()}}, #state{}) ->
+                 ({encode, {bridge:command(), bridge:json_obj()}}, #state{}) ->
                          {noreply, #state{}};
                  ({decode, binary()}, #state{}) ->
                          {noreply, #state{}}.
@@ -66,6 +64,6 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 terminate(_Reason, _State) -> ok.
 
--spec parse_json(binary()) -> json().
+-spec parse_json(binary()) -> bridge:json().
 parse_json(Binary) ->
     jiffy:decode(Binary).

@@ -1,6 +1,33 @@
 -module(bridge).
 
--include("bridge_types.hrl").
+-export_type([proplist/2, json_key/0, json_obj/0, json/0]).
+-export_type([command/0, remote_service/0, service/0, options/0]).
+
+-type proplist(K, V) :: [{K, V}].
+
+-type json_key() :: atom()
+                  | binary().
+-type json_obj() :: {proplist(json_key(), json())}.
+-type json() :: json_obj()
+              | [json()]
+              | json_key()
+              | number().
+
+-type command() :: 'JOINWORKERPOOL'
+                 | 'JOINCHANNEL'
+                 | 'LEAVEWORKERPOOL'
+                 | 'LEAVECHANNEL'
+                 | 'GETCHANNEL'
+                 | 'CONNECT'
+                 | 'SEND'.
+-type remote_service() :: {[{binary(), [json_key()]}]}.
+-type service() :: function()
+                 | pid()
+                 | remote_service()
+                 | undefined.
+-type options() :: proplist(atom(), any()).
+-define(Ref(X), {[{<<"ref">>, X}]}).
+
 
 %% Bridge API.
 -export([publish_service/2, join_channel/2]).
@@ -14,7 +41,7 @@
 -export([cast/2]).
 
 -spec new(options()) -> {ok, pid()} | {error, _}.
-new(Opts) -> bridge.core:start_link(Opts).
+new(Opts) -> bridge_core:start_link(Opts).
 
 -spec connect(pid()) -> ok.
 connect(Pid) ->
@@ -119,7 +146,7 @@ context(Bridge) ->
 get_client(_Pid, ClientId) ->
     ?Ref([client, ClientId]).
 
--spec send_command(pid(), bridge_command(), json_obj()) -> ok.
+-spec send_command(pid(), command(), json_obj()) -> ok.
 send_command(Pid, Op, Args) ->
     gen_server:cast(Pid, {outbound, {Op, Args}}).
 

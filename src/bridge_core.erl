@@ -1,6 +1,7 @@
--module(bridge.core).
+-module(bridge_core).
 -behaviour(gen_server).
 
+-define(Ref(X), {[{<<"ref">>, X}]}).
 %% TODO: Enforce style consistency.
 
 -export([code_change/3, handle_call/3, handle_cast/2,
@@ -20,7 +21,6 @@
 -import(dict).
 
 -import(bridge).
--include("bridge_types.hrl").
 
 -record(state,
         { opts          = [],
@@ -36,19 +36,19 @@
           key
         }).
 
--spec start_link(options()) -> {ok, pid()} | ignore | {error, term()}.
+-spec start_link(bridge:options()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Opts) -> gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
 
 seed() ->
     {A1, A2, A3} = erlang:now(),
     random:seed(A1, A2, A3).
 
--spec init(options()) -> {ok, #state{}}.
+-spec init(bridge:options()) -> {ok, #state{}}.
 init(Options) ->
     seed(),
     Opts = Options ++ ?DEFAULT_OPTIONS,
     Key = proplists:get_value(api_key, Opts),
-    {ok, E} = bridge.serializer:start_link(Opts),
+    {ok, E} = bridge_encoder:start_link(Opts),
     {ok, #state{opts = Opts, encoder = E, key = Key}}.
 
 -spec handle_call(context,
@@ -99,7 +99,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec update_state(json_key(), [json()], #state{}) -> #state{}.
+-spec update_state(bridge:json_key(), [bridge:json()], #state{}) -> #state{}.
 update_state(Op, Args, State = #state{encoder = S}) ->
     {Encoded, NewState} = encode(Args, State),
     gen_server:cast(S, {encode, {Op, Encoded}}),
@@ -119,7 +119,8 @@ send_command(Op, Args, State = #state{encoder = S}) ->
 context(#state{context = Context}) ->
     Context.
 
--spec invoke(service(), json_key(), [json()], #state{}) -> #state{}.
+-spec invoke(bridge:service(), bridge:json_key(), [bridge:json()], #state{}) ->
+		    #state{}.
 invoke(Dest, _Method, Args, S) when is_function(Dest) ->
     apply(Dest, Args),
     S;
@@ -259,9 +260,10 @@ syscall(<<"remoteError">>, [Msg], _State) ->
     self() ! {error, {remote_error, Msg}},
     _State.
 
--spec unpack_dest(remote_service()) -> {service(), json_key()};
-                 ({service(), json_key()}) -> {service(), json_key()}.
-unpack_dest(?Ref(_Dest)) when is_list(_Dest) andalso
-                             length(_Dest) == 4 ->
-    {?Ref(lists:sublist(_Dest, 3)), lists:last(_Dest)};
+-spec unpack_dest(bridge:remote_service()) ->
+			 {bridge:service(), bridge:json_key()};
+                 ({bridge:service(), bridge:json_key()}) ->
+			 {bridge:service(), bridge:json_key()}.
+unpack_dest(?Ref([Type, Id, Handler, Method])) ->
+    {?Ref([Type, Id, Handler]), Method};
 unpack_dest(D = {_Dest, _Method}) -> D.
