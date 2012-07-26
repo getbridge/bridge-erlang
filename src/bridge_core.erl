@@ -254,8 +254,8 @@ syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _S) ->
     end,
     State;
 syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
-    bridge:cast(self(), { Func, callback,
-                          [find(["named", Name, Name], Map), Name] }),
+    {ok, Value} = find([<<"named">>, Name, Name], Map),
+    bridge:cast(self(), { Func, callback, [Value, Name] }),
     _State;
 syscall(<<"remoteError">>, [Msg], _State) ->
     self() ! {error, {remote_error, Msg}},
