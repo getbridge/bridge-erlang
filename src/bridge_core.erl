@@ -32,9 +32,7 @@
 exports(Pid) when is_function(Pid) ->
     [callback];
 exports(Pid) when is_pid(Pid) ->
-    gen_server:call(Pid, exports);
-exports(_Pid) ->
-    [].
+    gen_server:call(Pid, exports).
 
 -spec start_link(bridge:options()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Opts) -> gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).

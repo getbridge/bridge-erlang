@@ -14,7 +14,10 @@
           queue         = []      % calls to be flushed upon connection.
         }).
 
--type address() :: httpc:ip_address() | bridge_tcp:hostname().
+-type address() :: inet:ip_address() | bridge_tcp:hostname().
+-type httpc_result() :: {{string(), integer(), string()},
+			 _Hdrs :: [{string(), string()}], string() | binary()}
+		      | {pos_integer(), string() | binary()}.
 
 -spec get_val(bridge:json_key(), bridge:json_obj()) -> bridge:json();
              (bridge:json_key(), bridge:proplist(bridge:json_key(), any())) ->
@@ -60,7 +63,7 @@ redirector(Opts) ->
     redirector_response(httpc:request(get, {Target, []}, [],
                                       [{body_format, binary}]), Opts).
 
--spec redirector_response(httpc:httpc_result(), bridge:options()) ->
+-spec redirector_response(httpc_result(), bridge:options()) ->
                                  {ok, pid()} | {error, term()}.
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge_encoder:parse_json(Body),
@@ -82,15 +85,13 @@ parse_int(Term) ->
        true             -> 0
     end.
 
--spec connect(address(), bridge_tcp:port_number(), boolean()) -> {ok, pid()}.
+-spec connect(address(), inet:port_number(), boolean()) -> {ok, pid()}.
 connect(Host, Port, Secure) ->
     _Sock = spawn_link(bridge_tcp, connect,
                               [self(), Secure, Host, Port,
                                [binary, {active, true}]]),
     {ok, _Sock}.
 
--spec handle_cast({}, {#state{}, bridge:options()}) ->
-                         {noreply, #state{}} | {stop, any(), #state{}}.
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
