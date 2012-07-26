@@ -74,8 +74,8 @@ init({Opts, Encoder}) ->
 -spec dispatch(bridge:options()) -> {ok, pid()} | {error, _Reason :: term()}.
 dispatch(Opts) ->
     {Host, Port} = {get_val(host, Opts), get_val(port, Opts)},
-    case is_list(Host) andalso io_lib:char_list(Host)
-        andalso is_integer(Port) andalso 0 < Port andalso Port < 65536 of
+    case is_list(Host) andalso io_lib:char_list(Host) andalso
+	is_integer(Port) andalso 0 < Port andalso Port < 65536 of
         true ->
             connect(Host, Port, get_val(secure, Opts));
         false ->
