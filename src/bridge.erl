@@ -157,6 +157,5 @@ send_command(Pid, Op, Args) ->
 append_ref({[{<<"ref">>, Ref} | _Tail]}, Element) ->
     ?Ref(Ref ++ [Element]);
 append_ref({[_X | Next]}, Element) ->
-    io:format("~p~n", [_X]),
     append_ref({Next}, Element).
 

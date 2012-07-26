@@ -35,7 +35,7 @@ main() ->
     bridge:cast(Bridge, {Auth, join, ['bridge-lovers',
                                       'secret123',
                                       ChatHandler,
-                                      fun join_callback/3]}).
+                                      fun (C, N) -> join_callback(C, N, Bridge) end]}).
 
 init(Bridge) ->
     {ok, #state{bridge = Bridge}}.
