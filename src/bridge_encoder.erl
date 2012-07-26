@@ -9,12 +9,6 @@
 
 -export([parse_json/1]).
 
--import(gen_server).
--import(erlang).
--import(lists).
-
--import(jiffy).
-
 -record(state,
         { connection = undefined,
           bridge     = undefined

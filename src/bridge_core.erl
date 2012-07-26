@@ -2,6 +2,8 @@
 -behaviour(gen_server).
 
 -define(Ref(X), {[{<<"ref">>, X}]}).
+-define(Ref(Pid, X), {[{<<"ref">>, X}, {<<"operations">>, exports(Pid)}]}).
+
 %% TODO: Enforce style consistency.
 
 -export([code_change/3, handle_call/3, handle_cast/2,
@@ -12,15 +14,6 @@
          {redirector, "http://redirector.getbridge.com"},
          {secure_redirector, "https://redirector.getbridge.com"},
          {secure, true}]).
-
--import(gen_server).
--import(gen_event).
--import(proplists).
--import(random).
--import(lists).
--import(dict).
-
--import(bridge).
 
 -record(state,
         { opts          = [],
@@ -36,11 +29,18 @@
           key
         }).
 
+exports(Pid) when is_function(Pid) ->
+    [callback];
+exports(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, exports);
+exports(_Pid) ->
+    [].
+
 -spec start_link(bridge:options()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Opts) -> gen_server:start({local, ?MODULE}, ?MODULE, Opts, []).
 
 seed() ->
-    {A1, A2, A3} = erlang:now(),
+    {A1, A2, A3} = now(),
     random:seed(A1, A2, A3).
 
 -spec init(bridge:options()) -> {ok, #state{}}.
@@ -113,20 +113,15 @@ send_command(Op, Args, State = #state{connected = false, queue = Q}) ->
     State#state{queue = [fun(S) -> update_state(Op, Args, S) end | Q]};
 
 send_command(Op, Args, State = #state{encoder = S}) ->
-    gen_server:cast(S, {encode, {Op, Args}}),
-    State.
+    {Encoded, NewState} = encode(Args, State),
+    gen_server:cast(S, {encode, {Op, Encoded}}),
+    NewState.
 
 context(#state{context = Context}) ->
     Context.
 
 -spec invoke(bridge:service(), bridge:json_key(), [bridge:json()], #state{}) ->
 		    #state{}.
-invoke(Dest, _Method, Args, S) when is_function(Dest) ->
-    apply(Dest, Args),
-    S;
-invoke(Dest, Method, Args, S) when is_pid(Dest) ->
-    gen_server:cast(Dest, {to_atom(Method), Args}),
-    S;
 invoke(Dest, Method, Args, S) when is_tuple(Dest) ->
     ?Ref(Dst) = Dest,
     case lists:nth(3, Dst) of
@@ -135,12 +130,18 @@ invoke(Dest, Method, Args, S) when is_tuple(Dest) ->
         _NoClue ->
             %% we don't have this method...?
             S
-    end.
+    end;
+invoke(Dest, _Method, Args, S) when is_function(Dest) ->
+    bridge:cast(self(), {Dest, _Method, Args}),
+    S;
+invoke(Dest, Method, Args, S) when is_pid(Dest) ->
+    bridge:cast(self(), {Dest, to_atom(Method), Args}),
+    S.
 
 -spec to_atom(binary() | atom()) -> atom().
 to_atom(Item) ->
     if is_binary(Item) ->
-            erlang:binary_to_existing_atom(Item, utf8);
+            binary_to_existing_atom(Item, utf8);
        is_atom(Item) ->
             Item;
        true ->
@@ -180,8 +181,8 @@ store(Key, State = #state{encode_map = Enc,
                           id  = Id  }) ->
     Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
     Val = [<<"client">>, list_to_binary(Id), Str],
-    {?Ref(Val), State#state{encode_map = dict:store(Key, Val, Enc),
-                           decode_map = dict:store(Val, Key, Dec)}}.
+    {?Ref(Key, Val), State#state{encode_map = dict:store(Key, Val, Enc),
+				 decode_map = dict:store(Val, Key, Dec)}}.
 
 
 decode([], State) ->
@@ -200,7 +201,7 @@ decode(?Ref(T), State = #state{decode_map = Map}) when is_list(T) ->
             if Root == T ->
                     {?Ref(T), State};
                Svc == <<"system">> ->
-                    {{Root, Method}, State};
+                    {{?Ref(Root), Method}, State};
                true ->
                     {Decoded, State} = decode(?Ref(Root), State),
                     if is_tuple(Decoded) ->
@@ -243,13 +244,13 @@ encode(Data, State) ->
 
 syscall(<<"hookChannelHandler">>, [Name, Handler], State) ->
     syscall(<<"hookChannelHandler">>, [Name, Handler, undefined], State);
-syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _State) ->
-    State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]},
-                      _State),
-    if Func == undefined -> ok;
-       true -> Path = [channel, Name, <<"channel:", Name/binary>>],
-               bridge:cast(self(),
-                           {Func, callback, [?Ref(Path), Name]})
+syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _S) ->
+    State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]}, _S),
+    if Func == undefined ->
+	    ok;
+       true ->
+	    Path = [channel, Name, <<"channel:", Name/binary>>],
+	    bridge:cast(self(), {Func, callback, [?Ref(Path), Name]})
     end,
     State;
 syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->

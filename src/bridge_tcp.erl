@@ -1,18 +1,12 @@
 -module(bridge_tcp).
 -export([send/2, connect/5, receive_data/3]).
--import(gen_tcp).
--import(erlang).
--import(binary).
--import(ssl).
 
--export_type([hostname/0, port_number/0]).
+-export_type([hostname/0]).
 
--type hostname() :: atom() | string().
--type port_number() :: 0..65535.
--type socket() :: pid() | {sslsocket, new_ssl, pid()}.
+-type hostname() :: inet:ip_address() | inet:hostname().
 
 -spec connect(pid(), boolean(), hostname(),
-	      port_number(), bridge:proplist(atom(), any())) -> no_return().
+	      inet:port_number(), bridge:proplist(atom(), any())) -> no_return().
 connect(Conn, Secure, Host, Port, Opts) ->
     if Secure ->
             Mod = ssl;
@@ -24,6 +18,7 @@ connect(Conn, Secure, Host, Port, Opts) ->
 
 -spec send(pid(), binary()) -> {bridge, pid(), binary()}.
 send(Sock, Msg) ->
+    io:format("RECEIVED " ++ binary_to_list(Msg) ++ "~n~n"),
     Sock ! {bridge, self(), Msg}.
 
 -spec receive_data(pid(), [binary()], binary()) -> no_return().
@@ -31,8 +26,9 @@ receive_data(Conn, Buf, Data) ->
     Bin = list_to_binary([Buf, Data]),
     if byte_size(Bin) > 4 ->
             <<Len:32, Msg/binary>> = Bin,
-            if Len >= erlang:byte_size(Msg) ->
+            if Len >= byte_size(Msg) ->
 		    <<First:Len/binary, Rest/binary>> = Msg,
+		    io:format("RECEIVED " ++ binary_to_list(First) ++ "~n~n"),
                     Conn ! {tcp, First},
                     [Rest];
                true ->
@@ -42,7 +38,7 @@ receive_data(Conn, Buf, Data) ->
             [Bin]
     end.
 
--spec loop(pid(), socket(), function(), [binary()]) -> no_return().
+-spec loop(pid(), inet:socket(), function(), [binary()]) -> no_return().
 loop(Conn, S, Send, Buf) ->
     receive
         {bridge, Conn, Data} ->

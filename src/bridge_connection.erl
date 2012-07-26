@@ -7,19 +7,6 @@
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1]).
 -export([code_change/3, terminate/2]).
 
--import(erlang).
--import(ssl).
-
--import(inets).
--import(httpc).
-
--import(gen_server).
-
--import(proplists).
--import(binary).
--import(io_lib).
--import(lists).
-
 -record(state,
         { socket        = undefined,
           encoder    = undefined,
@@ -27,24 +14,7 @@
           queue         = []      % calls to be flushed upon connection.
         }).
 
--type address() :: ip_address() | bridge_tcp:hostname().
--type ip_address() :: ip4_address() | ip6_address().
--type ip4_address() :: { byte(), byte(), byte(), byte() }.
-
--type ip6_address() :: { 0..65535, 0..65535, 0..65535, 0..65535, 
-                         0..65535, 0..65535, 0..65535, 0..65535  }.
-
--type httpc_result() :: {status_line(), headers(), httpc_body()}
-                      | {status_code(), httpc_body()}.
-
--type httpc_body() :: string() | binary().
--type status_line()    :: {http_version(), status_code(), reason_phrase()}.
--type http_version()   :: string().
--type status_code()    :: pos_integer().
--type reason_phrase()  :: string().
--type headers()        :: [header()].
--type header()         :: {string(), string()}.
-
+-type address() :: httpc:ip_address() | bridge_tcp:hostname().
 
 -spec get_val(bridge:json_key(), bridge:json_obj()) -> bridge:json();
              (bridge:json_key(), bridge:proplist(bridge:json_key(), any())) ->
@@ -90,7 +60,7 @@ redirector(Opts) ->
     redirector_response(httpc:request(get, {Target, []}, [],
                                       [{body_format, binary}]), Opts).
 
--spec redirector_response(httpc_result(), bridge:options()) ->
+-spec redirector_response(httpc:httpc_result(), bridge:options()) ->
                                  {ok, pid()} | {error, term()}.
 redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
     Json = bridge_encoder:parse_json(Body),
@@ -114,7 +84,7 @@ parse_int(Term) ->
 
 -spec connect(address(), bridge_tcp:port_number(), boolean()) -> {ok, pid()}.
 connect(Host, Port, Secure) ->
-    _Sock = erlang:spawn_link(bridge_tcp, connect,
+    _Sock = spawn_link(bridge_tcp, connect,
                               [self(), Secure, Host, Port,
                                [binary, {active, true}]]),
     {ok, _Sock}.
@@ -129,7 +99,7 @@ handle_cast({connect, Data}, {State, Options}) ->
         Msg -> {stop, {redirector, Msg}, State}
     end;
 handle_cast(Data, State = #state{socket = Sock}) ->
-    Sock ! {bridge, self(), Data},
+    bridge_tcp:send(Sock, Data),
     {noreply, State}.
 
 handle_call(_Request, _From, _State) ->

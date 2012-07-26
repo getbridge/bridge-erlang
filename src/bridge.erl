@@ -55,8 +55,10 @@ is_service(Term) ->
 
 %% Ex: bridge:cast(BridgePid, {get_service(auth), join, Args = [term()]})
 -spec cast(pid(), {service(), atom(), [json()]}) -> ok.
+cast(Pid, {<<"undefined">>, _Method, _Args}) when is_pid(Pid)->
+    ok;
 cast(_Pid, {Svc, _Method, Args}) when is_function(Svc) andalso is_pid(_Pid) ->
-    erlang:apply(Svc, Args ++ [_Pid]),
+    apply(Svc, Args),
     ok;
 cast(_Pid, {Svc, Method, Args}) when is_pid(Svc) andalso is_pid(_Pid) ->
     gen_server:cast(Svc, {Method, Args});
@@ -135,7 +137,7 @@ get_service(_Bridge, SvcName) when SvcName =/= system ->
 get_channel(Bridge, ChannelName) when is_pid(Bridge) andalso
                                       is_atom(ChannelName)   ->
     send_command(Bridge, 'GETCHANNEL', {[{name, ChannelName}]}),
-    BinName = erlang:atom_to_binary(ChannelName, utf8),
+    BinName = atom_to_binary(ChannelName, utf8),
     ?Ref([channel, ChannelName, <<"channel:", BinName/binary>>]).
 
 -spec context(pid()) -> remote_service().
@@ -152,6 +154,9 @@ send_command(Pid, Op, Args) ->
 
 
 -spec append_ref(remote_service(), json_key()) -> remote_service().
-append_ref(?Ref(Ref), Element) ->
-    ?Ref(Ref ++ [Element]).
+append_ref({[{<<"ref">>, Ref} | _Tail]}, Element) ->
+    ?Ref(Ref ++ [Element]);
+append_ref({[_X | Next]}, Element) ->
+    io:format("~p~n", [_X]),
+    append_ref({Next}, Element).
 
