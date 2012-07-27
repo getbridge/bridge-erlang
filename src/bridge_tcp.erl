@@ -18,7 +18,6 @@ connect(Conn, Secure, Host, Port, Opts) ->
 
 -spec send(pid(), binary()) -> {bridge, pid(), binary()}.
 send(Sock, Msg) ->
-    io:format("SENDING: " ++ binary_to_list(Msg) ++ "~n~n"),
     Sock ! {bridge, self(), Msg}.
 
 -spec receive_data(pid(), [binary()], binary()) -> no_return().
@@ -28,7 +27,6 @@ receive_data(Conn, Buf, Data) ->
             <<Len:32, Msg/binary>> = Bin,
             if Len >= byte_size(Msg) ->
 		    <<First:Len/binary, Rest/binary>> = Msg,
-		    io:format("RECEIVED: " ++ binary_to_list(First) ++ "~n~n"),
                     Conn ! {tcp, First},
                     [Rest];
                true ->

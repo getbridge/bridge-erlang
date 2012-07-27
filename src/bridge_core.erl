@@ -83,7 +83,7 @@ handle_cast(connect, State) ->
 
 handle_info(_Info, State = #state{event_handler = undefined}) ->
     {noreply, State};
-handle_info(Info, State = #state{event_handler = E}) ->
+handle_info({From, Info}, State = #state{event_handler = E}) ->
     gen_event:notify(E, Info),
     {noreply, State}.
 

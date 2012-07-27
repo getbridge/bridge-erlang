@@ -95,25 +95,27 @@ connect(Host, Port, Secure) ->
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
-            bridge_tcp:send(Sock, Data),
-            {noreply, State#state{socket = Sock}};
+	    handle_cast(Data, State#state{socket = Sock});
         Msg -> {stop, {redirector, Msg}, State}
     end;
-handle_cast(Data, State = #state{socket = Sock}) ->
+handle_cast(Data, State = #state{socket = Sock, encoder = E}) ->
+    E ! {self(), {info, {send, Data}}},
     bridge_tcp:send(Sock, Data),
     {noreply, State}.
 
 handle_call(_Request, _From, _State) ->
     {noreply, _State}.
 
-handle_info({tcp, Str}, State = #state{client_id = undefined}) ->
+handle_info({tcp, Str}, State = #state{client_id = undefined, encoder = E}) ->
+    E ! {self(), {info, {'receive', Str}}},
     NewState = extract_session(Str, State),
     FlushedState = flush_queue(NewState),
     {noreply, FlushedState};
 handle_info({tcp, Str}, State) ->
+    State#state.encoder ! {self(), {info, {'receive', Str}}},
     {noreply, process_message(Str, State)};
-handle_info(tcp_closed, State = #state{encoder = S}) ->
-    S ! {self(), disconnect},
+handle_info(tcp_closed, State = #state{encoder = E}) ->
+    E ! {self(), disconnect},
     {noreply, State};
 handle_info(_Request, _State) ->
     {error, _Request}.
