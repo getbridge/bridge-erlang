@@ -13,7 +13,8 @@
         [{log, 2},
          {redirector, "http://redirector.getbridge.com"},
          {secure_redirector, "https://redirector.getbridge.com"},
-         {secure, true}]).
+         {secure, true},
+         {reconnect, true}]).
 
 -record(state,
         { opts          = [],

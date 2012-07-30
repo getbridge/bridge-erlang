@@ -44,26 +44,26 @@ receive_data(Conn, Buf, Data) ->
     end.
 
 -spec loop(pid(), inet:socket(), function(), #state{}) -> no_return().
-loop(Conn, E, Send, S = #state{queue = Q}) ->
+loop(Conn, Sock, Send, S = #state{queue = Q}) ->
     receive
         {bridge, Conn, Data} ->
             Len = byte_size(Data),
-            Send(S, <<Len:32, Data/binary>>),
-            loop(Conn, E, Send, S);
-        {tcp, S, Data} ->
-            loop(Conn, E, Send, receive_data(Conn, Q, Data));
-        {ssl, S, Data} ->
-            loop(Conn, E, Send, S#state{queue = receive_data(Conn, Q, Data)});
-        {tcp_closed, E} ->
+            Send(Sock, <<Len:32, Data/binary>>),
+            loop(Conn, Sock, Send, S);
+        {tcp, Sock, Data} ->
+            loop(Conn, Sock, Send, receive_data(Conn, Q, Data));
+        {ssl, Sock, Data} ->
+            loop(Conn, Sock, Send, S#state{queue = receive_data(Conn, Q, Data)});
+        {tcp_closed, Sock} ->
             Conn ! {disconnect, tcp_closed},
             reconnect(S);
-        {ssl_closed, E} ->
+        {ssl_closed, Sock} ->
             Conn ! {disconnect, ssl_closed},
             reconnect(S);
         _Something ->
             .io:format("Unknown: ~p~n", [_Something]),
-            .io:format("~p~n", [E]),
-            loop(Conn, E, Send, S)
+            .io:format("~p~n", [Sock]),
+            loop(Conn, Sock, Send, S)
     end.
 
 -spec reconnect(#state{}) -> no_return() | error.
