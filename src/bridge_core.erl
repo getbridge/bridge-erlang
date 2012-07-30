@@ -9,6 +9,8 @@
 -export([code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, init/1, start_link/1, terminate/2]).
 
+-export([reconnect/2]).
+
 -define(DEFAULT_OPTIONS,
         [{log, 2},
          {redirector, "http://redirector.getbridge.com"},
@@ -83,11 +85,18 @@ handle_cast(connect, State) ->
     {noreply, connect(State)}.
 
 handle_info({E, Info = {disconnect, _}}, State = #state{event_handler = Ev,
-                                                        encoder = E}) ->
+                                                        encoder = E,
+							opts = Opts}) ->
     if is_pid(Ev) ->
             gen_event:notify(Ev, Info);
        true ->
             ok
+    end,
+    R = proplists:get_value(reconnect, Opts),
+    if R ->
+	    timer:apply_after(100, ?MODULE, reconnect, [self(), 100]);
+       true ->
+	    ok
     end,
     {noreply, State#state{connected = false}};
 handle_info(_Info, State = #state{event_handler = undefined}) ->
@@ -275,3 +284,16 @@ syscall(<<"remoteError">>, [Msg], _State) ->
 unpack_dest(?Ref([Type, Id, Handler, Method])) ->
     {?Ref([Type, Id, Handler]), Method};
 unpack_dest(D = {_Dest, _Method}) -> D.
+-spec reconnect(pid(), integer()) -> ok.
+
+reconnect(Pid, Timeout) when Timeout > 10000 ->
+    Pid ! {Pid, {error, reconnect_timeout}};
+reconnect(Pid, Timeout) ->
+    Connected = gen_server:call(Pid, is_connected),
+    if Connected ->
+	    ok;
+       true ->
+	    bridge:connect(Pid),
+	    timer:apply_after(Timeout * 2, ?MODULE, reconnect,
+			      [self(), Timeout * 2])
+    end.

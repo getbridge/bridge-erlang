@@ -11,8 +11,8 @@
         { socket     = undefined,
           encoder    = undefined,
           client_id  = undefined,
-          reconnect  = false,
-          connected  = false
+          connected  = false,
+	  options    = []
         }).
 
 -type address() :: inet:ip_address() | bridge_tcp:hostname().
@@ -32,17 +32,17 @@ get_val(Key, PList) ->
 start_link(Opts) ->
     gen_server:start({local, ?MODULE}, ?MODULE, {Opts, self()}, []).
 
--spec init({bridge:options(), pid()}) -> {ok, {#state{}, bridge:options()}}.
+-spec init({bridge:options(), pid()}) -> {ok, #state{}}.
 init({Opts, Encoder}) ->
     inets:start(),
-    case get_val(secure, Opts) of
-        true ->
+    Secure = get_val(secure, Opts),
+    if Secure ->
             ssl:start(),
             Options = [{redirector, get_val(secure_redirector, Opts)} | Opts];
-        _ ->
+       true ->
             Options = Opts
     end,
-    {ok, {#state{encoder = Encoder}, Options}}.
+    {ok, #state{encoder = Encoder, options = Options}}.
 
 %% Assuming Options is a proplist, still: will simply crash otherwise.
 -spec dispatch(bridge:options()) -> {ok, pid()} | {error, _Reason :: term()}.
@@ -51,7 +51,7 @@ dispatch(Opts) ->
     case is_list(Host) andalso io_lib:char_list(Host) andalso
         is_integer(Port) andalso 0 < Port andalso Port < 65536 of
         true ->
-            connect(Host, Port, get_val(secure, Opts), get_val(reconnect, Opts));
+            connect(Host, Port, get_val(secure, Opts));
         false ->
             redirector(Opts)
     end.
@@ -74,8 +74,7 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
         Data ->
             connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
                     parse_int(get_val(<<"bridge_port">>, Data)),
-                    get_val(secure, Opts),
-                    get_val(reconnect, Opts))
+                    get_val(secure, Opts))
     end;
 redirector_response(_Res, _Opts) -> {error, _Res}.
 
@@ -87,15 +86,16 @@ parse_int(Term) ->
        true             -> 0
     end.
 
--spec connect(address(), inet:port_number(), boolean(), boolean()) ->
+-spec connect(address(), inet:port_number(), boolean()) ->
                      {ok, pid()}.
-connect(Host, Port, Secure, Reconnect) ->
+connect(Host, Port, Secure) ->
     _Sock = spawn_link(bridge_tcp, connect,
-                       [self(), Reconnect, Secure, Host, Port,
+                       [self(), Secure, Host, Port,
                         [binary, {active, true}]]),
     {ok, _Sock}.
 
-handle_cast({connect, Data}, {State, Options}) ->
+handle_cast({connect, Data}, State = #state{connected = false,
+					    options = Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
             handle_cast(Data, State#state{socket = Sock});
@@ -106,6 +106,8 @@ handle_cast(Data, State = #state{socket = Sock, encoder = E}) ->
     bridge_tcp:send(Sock, Data),
     {noreply, State}.
 
+handle_call(is_connected, _From, _State = #state{connected = C}) ->
+    C;
 handle_call(_Request, _From, _State) ->
     {noreply, _State}.
 
@@ -115,11 +117,11 @@ handle_info({tcp, Str}, State = #state{connected = false, encoder = E}) ->
 handle_info({tcp, Str}, State) ->
     State#state.encoder ! {self(), {info, {'receive', Str}}},
     {noreply, process_message(Str, State)};
-handle_info({disconnect, _Type}, State = #state{encoder = E}) ->
+handle_info({disconnect, _Type}, S = #state{encoder = E}) ->
     E ! {self(), {disconnect, _Type}},
-    {noreply, State#state{connected = false}};
-handle_info(_Request, _State) ->
-    {error, _Request}.
+    {noreply, S#state{connected = false}};
+handle_info(_Request, _State = #state{encoder = E}) ->
+    E ! {self(), _Request}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
