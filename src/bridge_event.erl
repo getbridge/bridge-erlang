@@ -7,10 +7,15 @@
 	 handle_info/2, terminate/2, code_change/3]).
 
 init(_Opts) ->
-    {ok, ':)'}.
+    {ok, proplists:get_value(_Opts, log)}.
 
 handle_event({Tag, Event}, State) ->
-    io:format("~p : ~p ~n", [Tag, Event]),
+    case should_log(Tag, State) of
+	true ->
+	    io:format("~p : ~p ~n", [Tag, Event]);
+	false ->
+	    ok
+    end,
     {ok, State}.
 
 handle_info(Info, State) ->
@@ -25,3 +30,10 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+should_log(error, State) ->
+    State > 0;
+should_log(warning, State) ->
+    State > 1;
+should_log(_Tag, State) ->
+    State > 2.

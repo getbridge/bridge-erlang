@@ -25,7 +25,17 @@
                  | pid()
                  | remote_service()
                  | undefined.
--type options() :: proplist(atom(), any()).
+
+-type option() :: {api_key, atom()}
+		| {host, string()}
+		| {port, 0..65535}
+		| {redirector, string()}
+		| {secure_redirector, string()}
+		| {secure, boolean()}
+		| {reconnect, boolean()}
+		| {log, 0..3}.
+
+-type options() :: [option()].
 -define(Ref(X), {[{<<"ref">>, X}]}).
 
 
