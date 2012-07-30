@@ -81,9 +81,17 @@ handle_cast({connect_response, {Id, S}}, State = #state{queue = Q}) ->
 handle_cast(connect, State) ->
     {noreply, connect(State)}.
 
+handle_info({E, Info = {disconnect, _}}, State = #state{event_handler = Ev,
+							encoder = E}) ->
+    if is_pid(Ev) ->
+	    gen_event:notify(Ev, Info);
+       true ->
+	    ok
+    end,
+    {noreply, State#state{connected = false}};
 handle_info(_Info, State = #state{event_handler = undefined}) ->
     {noreply, State};
-handle_info({From, Info}, State = #state{event_handler = E}) ->
+handle_info({_From, Info}, State = #state{event_handler = E}) ->
     gen_event:notify(E, Info),
     {noreply, State}.
 
