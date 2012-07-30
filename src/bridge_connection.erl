@@ -138,6 +138,12 @@ process_message(Msg, State = #state{encoder = Encoder}) ->
 
 -spec extract_session(binary(), #state{}) -> #state{}.
 extract_session(Str, State = #state{encoder = S}) ->
-    [Id, Secret] = [binary_to_list(E) || E <- binary:split(Str, <<"|">>)],
-    gen_server:cast(S, {connect_response, {Id, Secret}}),
-    State#state{client_id = Id}.
+    Lst = [binary_to_list(E) || E <- binary:split(Str, <<"|">>)],
+    if length(Lst) == 2 ->
+	    [Id, Secret] = Lst,
+	    gen_server:cast(S, {connect_response, {Id, Secret}}),
+	    State#state{client_id = Id};
+       true ->
+	    process_message(Str, State),
+	    State
+    end.
