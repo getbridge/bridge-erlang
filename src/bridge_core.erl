@@ -82,11 +82,11 @@ handle_cast(connect, State) ->
     {noreply, connect(State)}.
 
 handle_info({E, Info = {disconnect, _}}, State = #state{event_handler = Ev,
-							encoder = E}) ->
+                                                        encoder = E}) ->
     if is_pid(Ev) ->
-	    gen_event:notify(Ev, Info);
+            gen_event:notify(Ev, Info);
        true ->
-	    ok
+            ok
     end,
     {noreply, State#state{connected = false}};
 handle_info(_Info, State = #state{event_handler = undefined}) ->
@@ -127,7 +127,7 @@ context(#state{context = Context}) ->
     Context.
 
 -spec invoke(bridge:service(), bridge:json_key(), [bridge:json()], #state{}) ->
-		    #state{}.
+                    #state{}.
 invoke(Dest, Method, Args, S) when is_tuple(Dest) ->
     ?Ref(Dst) = Dest,
     case lists:nth(3, Dst) of
@@ -188,7 +188,7 @@ store(Key, State = #state{encode_map = Enc,
     Str = list_to_binary([random:uniform(26)+96 || _X <- lists:seq(1,16)]),
     Val = [<<"client">>, list_to_binary(Id), Str],
     {?Ref(Key, Val), State#state{encode_map = dict:store(Key, Val, Enc),
-				 decode_map = dict:store(Val, Key, Dec)}}.
+                                 decode_map = dict:store(Val, Key, Dec)}}.
 
 
 decode([], State) ->
@@ -253,10 +253,10 @@ syscall(<<"hookChannelHandler">>, [Name, Handler], State) ->
 syscall(<<"hookChannelHandler">>, [Name, Handler, Func], _S) ->
     State = bind_args(<<"channel">>, {[{name, Name}, {handler, Handler}]}, _S),
     if Func == undefined ->
-	    ok;
+            ok;
        true ->
-	    Path = [channel, Name, <<"channel:", Name/binary>>],
-	    bridge:cast(self(), {Func, callback, [?Ref(Path), Name]})
+            Path = [channel, Name, <<"channel:", Name/binary>>],
+            bridge:cast(self(), {Func, callback, [?Ref(Path), Name]})
     end,
     State;
 syscall(<<"getService">>, [Name, Func], _State = #state{decode_map = Map} ) ->
@@ -268,9 +268,9 @@ syscall(<<"remoteError">>, [Msg], _State) ->
     _State.
 
 -spec unpack_dest(bridge:remote_service()) ->
-			 {bridge:service(), bridge:json_key()};
+                         {bridge:service(), bridge:json_key()};
                  ({bridge:service(), bridge:json_key()}) ->
-			 {bridge:service(), bridge:json_key()}.
+                         {bridge:service(), bridge:json_key()}.
 unpack_dest(?Ref([Type, Id, Handler, Method])) ->
     {?Ref([Type, Id, Handler]), Method};
 unpack_dest(D = {_Dest, _Method}) -> D.

@@ -10,7 +10,9 @@
 -spec connect(pid(), boolean(), boolean(), hostname(), inet:port_number(),
 	      bridge:proplist(atom(), any())) -> no_return().
 
-connect(Conn, Reconnect, Secure, Host, Port, Opts) ->
+connect(Conn, Reconnect, Secure, Host, Port, Opts) when is_pid(Conn) andalso
+							is_boolean(Reconnect) andalso
+							is_boolean(Secure) ->
     if Secure ->
             Mod = ssl;
        true ->
@@ -42,26 +44,26 @@ receive_data(Conn, Buf, Data) ->
     end.
 
 -spec loop(pid(), inet:socket(), function(), #state{}) -> no_return().
-loop(Conn, S, Send, State = #state{queue = Buf}) ->
+loop(Conn, E, Send, S = #state{queue = Q}) ->
     receive
         {bridge, Conn, Data} ->
             Len = byte_size(Data),
             Send(S, <<Len:32, Data/binary>>),
-            loop(Conn, S, Send, Buf);
+            loop(Conn, E, Send, S);
         {tcp, S, Data} ->
-            loop(Conn, S, Send, receive_data(Conn, Buf, Data));
+            loop(Conn, E, Send, receive_data(Conn, Q, Data));
         {ssl, S, Data} ->
-            loop(Conn, S, Send, receive_data(Conn, Buf, Data));
-        {tcp_closed, S} ->
+            loop(Conn, E, Send, S#state{queue = receive_data(Conn, Q, Data)});
+        {tcp_closed, E} ->
             Conn ! {disconnect, tcp_closed},
-            reconnect(State);
-        {ssl_closed, S} ->
+            reconnect(S);
+        {ssl_closed, E} ->
             Conn ! {disconnect, ssl_closed},
-            reconnect(State);
+            reconnect(S);
         _Something ->
             .io:format("Unknown: ~p~n", [_Something]),
-            .io:format("~p~n", [S]),
-            loop(Conn, S, Send, Buf)
+            .io:format("~p~n", [E]),
+            loop(Conn, E, Send, S)
     end.
 
 -spec reconnect(#state{}) -> no_return() | error.

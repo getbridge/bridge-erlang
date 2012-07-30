@@ -11,14 +11,14 @@
         { socket     = undefined,
           encoder    = undefined,
           client_id  = undefined,
-	  reconnect  = false,
-	  connected  = false
+          reconnect  = false,
+          connected  = false
         }).
 
 -type address() :: inet:ip_address() | bridge_tcp:hostname().
 -type httpc_result() :: {{string(), integer(), string()},
-			 _Hdrs :: [{string(), string()}], string() | binary()}
-		      | {pos_integer(), string() | binary()}.
+                         _Hdrs :: [{string(), string()}], string() | binary()}
+                      | {pos_integer(), string() | binary()}.
 
 -spec get_val(bridge:json_key(), bridge:json_obj()) -> bridge:json();
              (bridge:json_key(), bridge:proplist(bridge:json_key(), any())) ->
@@ -49,7 +49,7 @@ init({Opts, Encoder}) ->
 dispatch(Opts) ->
     {Host, Port} = {get_val(host, Opts), get_val(port, Opts)},
     case is_list(Host) andalso io_lib:char_list(Host) andalso
-	is_integer(Port) andalso 0 < Port andalso Port < 65536 of
+        is_integer(Port) andalso 0 < Port andalso Port < 65536 of
         true ->
             connect(Host, Port, get_val(secure, Opts), get_val(reconnect, Opts));
         false ->
@@ -75,7 +75,7 @@ redirector_response({ok, {{_Vsn, 200, _Reason}, _Hd, Body}}, Opts) ->
             connect(binary_to_list(get_val(<<"bridge_host">>, Data)),
                     parse_int(get_val(<<"bridge_port">>, Data)),
                     get_val(secure, Opts),
-		    get_val(reconnect, Opts))
+                    get_val(reconnect, Opts))
     end;
 redirector_response(_Res, _Opts) -> {error, _Res}.
 
@@ -88,17 +88,17 @@ parse_int(Term) ->
     end.
 
 -spec connect(address(), inet:port_number(), boolean(), boolean()) ->
-		     {ok, pid()}.
+                     {ok, pid()}.
 connect(Host, Port, Secure, Reconnect) ->
     _Sock = spawn_link(bridge_tcp, connect,
-		       [self(), Reconnect, Secure, Host, Port,
-			[binary, {active, true}]]),
+                       [self(), Reconnect, Secure, Host, Port,
+                        [binary, {active, true}]]),
     {ok, _Sock}.
 
 handle_cast({connect, Data}, {State, Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
-	    handle_cast(Data, State#state{socket = Sock});
+            handle_cast(Data, State#state{socket = Sock});
         Msg -> {stop, {redirector, Msg}, State}
     end;
 handle_cast(Data, State = #state{socket = Sock, encoder = E}) ->
@@ -136,10 +136,10 @@ process_message(Msg, State = #state{encoder = Encoder}) ->
 extract_session(Str, State = #state{encoder = S}) ->
     Lst = [binary_to_list(E) || E <- binary:split(Str, <<"|">>)],
     if length(Lst) == 2 ->
-	    [Id, Secret] = Lst,
-	    gen_server:cast(S, {connect_response, {Id, Secret}}),
-	    State#state{client_id = Id, connected = true};
+            [Id, Secret] = Lst,
+            gen_server:cast(S, {connect_response, {Id, Secret}}),
+            State#state{client_id = Id, connected = true};
        true ->
-	    process_message(Str, State),
-	    State
+            process_message(Str, State),
+            State
     end.
