@@ -18,14 +18,13 @@ connect(Conn, Secure, Host, Port, Opts) when is_pid(Conn) andalso
             Mod = gen_tcp
     end,
     {ok, Sock} = Mod:connect(Host, Port, Opts),
-    loop(Conn, Sock, fun Mod:send/2,
-         #state{conn = Conn}).
+    loop(Sock, fun Mod:send/2, #state{conn = Conn}).
 
 -spec send(pid(), binary()) -> {bridge, pid(), binary()}.
 send(Sock, Msg) ->
     Sock ! {bridge, self(), Msg}.
 
--spec receive_data(pid(), [binary()], binary()) -> no_return().
+-spec receive_data(pid(), [binary()], binary()) -> [binary()].
 receive_data(Conn, Buf, Data) ->
     Bin = list_to_binary([Buf, Data]),
     if byte_size(Bin) > 4 ->
@@ -35,23 +34,23 @@ receive_data(Conn, Buf, Data) ->
                     Conn ! {tcp, First},
                     [Rest];
                true ->
-                    [Msg]
+                    [Bin]
             end;
        true ->
             [Bin]
     end.
 
--spec loop(pid(), inet:socket(), function(), #state{}) -> no_return().
+-spec loop(inet:socket(), function(), #state{}) -> no_return().
 loop(Sock, Send, S = #state{queue = Q, conn = Conn}) ->
     receive
         {bridge, Conn, Data} ->
             Len = byte_size(Data),
             Send(Sock, <<Len:32, Data/binary>>),
-            loop(Conn, Sock, Send, S);
+            loop(Sock, Send, S);
         {tcp, Sock, Data} ->
-            loop(Conn, Sock, Send, receive_data(Conn, Q, Data));
+            loop(Sock, Send, S#state{queue = receive_data(Conn, Q, Data)});
         {ssl, Sock, Data} ->
-            loop(Conn, Sock, Send, S#state{queue = receive_data(Conn, Q, Data)});
+            loop(Sock, Send, S#state{queue = receive_data(Conn, Q, Data)});
         {tcp_closed, Sock} ->
             Conn ! {disconnect, tcp_closed},
             exit(normal);
@@ -59,7 +58,6 @@ loop(Sock, Send, S = #state{queue = Q, conn = Conn}) ->
             Conn ! {disconnect, ssl_closed},
             exit(normal);
         _Something ->
-            .io:format("Unknown: ~p~n", [_Something]),
-            .io:format("~p~n", [Sock]),
-            loop(Conn, Sock, Send, S)
+            Conn ! {unknown, _Something},
+            loop(Sock, Send, S)
     end.
