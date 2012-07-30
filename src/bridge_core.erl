@@ -86,7 +86,7 @@ handle_cast(connect, State) ->
 
 handle_info({E, Info = {disconnect, _}}, State = #state{event_handler = Ev,
                                                         encoder = E,
-							opts = Opts}) ->
+                                                        opts = Opts}) ->
     if is_pid(Ev) ->
             gen_event:notify(Ev, Info);
        true ->
@@ -94,9 +94,9 @@ handle_info({E, Info = {disconnect, _}}, State = #state{event_handler = Ev,
     end,
     R = proplists:get_value(reconnect, Opts),
     if R ->
-	    timer:apply_after(100, ?MODULE, reconnect, [self(), 100]);
+            timer:apply_after(100, ?MODULE, reconnect, [self(), 100]);
        true ->
-	    ok
+            ok
     end,
     {noreply, State#state{connected = false}};
 handle_info(_Info, State = #state{event_handler = undefined}) ->
@@ -291,9 +291,9 @@ reconnect(Pid, Timeout) when Timeout > 10000 ->
 reconnect(Pid, Timeout) ->
     Connected = gen_server:call(Pid, is_connected),
     if Connected ->
-	    ok;
+            ok;
        true ->
-	    bridge:connect(Pid),
-	    timer:apply_after(Timeout * 2, ?MODULE, reconnect,
-			      [self(), Timeout * 2])
+            bridge:connect(Pid),
+            timer:apply_after(Timeout * 2, ?MODULE, reconnect,
+                              [self(), Timeout * 2])
     end.

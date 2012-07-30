@@ -12,7 +12,7 @@
           encoder    = undefined,
           client_id  = undefined,
           connected  = false,
-	  options    = []
+          options    = []
         }).
 
 -type address() :: inet:ip_address() | bridge_tcp:hostname().
@@ -95,7 +95,7 @@ connect(Host, Port, Secure) ->
     {ok, _Sock}.
 
 handle_cast({connect, Data}, State = #state{connected = false,
-					    options = Options}) ->
+                                            options = Options}) ->
     case dispatch(Options) of
         {ok, Sock} ->
             handle_cast(Data, State#state{socket = Sock});

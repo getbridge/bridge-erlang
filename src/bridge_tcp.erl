@@ -5,13 +5,13 @@
 
 -type hostname() :: inet:ip_address() | inet:hostname().
 
--record(state, {queue = [], module, conn, host, port, opts}).
+-record(state, {queue = [], conn}).
 
 -spec connect(pid(), boolean(), hostname(), inet:port_number(),
-	      bridge:proplist(atom(), any())) -> no_return().
+              bridge:proplist(atom(), any())) -> no_return().
 
 connect(Conn, Secure, Host, Port, Opts) when is_pid(Conn) andalso
-					     is_boolean(Secure) ->
+                                             is_boolean(Secure) ->
     if Secure ->
             Mod = ssl;
        true ->
@@ -19,8 +19,7 @@ connect(Conn, Secure, Host, Port, Opts) when is_pid(Conn) andalso
     end,
     {ok, Sock} = Mod:connect(Host, Port, Opts),
     loop(Conn, Sock, fun Mod:send/2,
-	 #state{module = Mod, conn = Conn,
-		host = Host, port = Port, opts = Opts}).
+         #state{conn = Conn}).
 
 -spec send(pid(), binary()) -> {bridge, pid(), binary()}.
 send(Sock, Msg) ->
@@ -32,7 +31,7 @@ receive_data(Conn, Buf, Data) ->
     if byte_size(Bin) > 4 ->
             <<Len:32, Msg/binary>> = Bin,
             if Len >= byte_size(Msg) ->
-		    <<First:Len/binary, Rest/binary>> = Msg,
+                    <<First:Len/binary, Rest/binary>> = Msg,
                     Conn ! {tcp, First},
                     [Rest];
                true ->
@@ -43,7 +42,7 @@ receive_data(Conn, Buf, Data) ->
     end.
 
 -spec loop(pid(), inet:socket(), function(), #state{}) -> no_return().
-loop(Conn, Sock, Send, S = #state{queue = Q}) ->
+loop(Sock, Send, S = #state{queue = Q, conn = Conn}) ->
     receive
         {bridge, Conn, Data} ->
             Len = byte_size(Data),
@@ -55,10 +54,10 @@ loop(Conn, Sock, Send, S = #state{queue = Q}) ->
             loop(Conn, Sock, Send, S#state{queue = receive_data(Conn, Q, Data)});
         {tcp_closed, Sock} ->
             Conn ! {disconnect, tcp_closed},
-	    exit(normal);
+            exit(normal);
         {ssl_closed, Sock} ->
             Conn ! {disconnect, ssl_closed},
-	    exit(normal);
+            exit(normal);
         _Something ->
             .io:format("Unknown: ~p~n", [_Something]),
             .io:format("~p~n", [Sock]),

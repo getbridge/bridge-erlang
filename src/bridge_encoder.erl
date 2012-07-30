@@ -11,8 +11,7 @@
 
 -record(state,
         { connection = undefined,
-          bridge     = undefined
-        }).
+          bridge     = undefined}).
 
 -spec start_link(bridge:options()) -> {ok, pid()}.
 start_link(Opts) ->
