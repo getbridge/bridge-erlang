@@ -31,7 +31,7 @@ ping(_State = #state{bridge = B}) ->
     bridge:cast(B, {Pong, pong, []}).
 
 main() ->
-    {ok, Bridge} = bridge:new([{api_key, '951da7fb819d0ef3'},
+    {ok, Bridge} = bridge:new([{api_key, 'myapikey'},
                                {secure, true}]),
     %% bridge:connect(Bridge),
     {ok, PingHandler} = ?MODULE:start_link(Bridge),

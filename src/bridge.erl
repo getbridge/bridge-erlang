@@ -47,12 +47,6 @@ new(Opts) -> bridge_core:start_link(Opts).
 connect(Pid) ->
     gen_server:cast(Pid, connect).
 
--spec is_service(service()) -> true.
-is_service(?Ref(Lst)) when is_list(Lst) ->
-    lists:all(fun(X) -> is_binary(X) orelse is_atom(X) end, Lst);
-is_service(Term) ->
-    is_function(Term) orelse is_pid(Term) orelse Term =:= undefined.
-
 %% Ex: bridge:cast(BridgePid, {get_service(auth), join, Args = [term()]})
 -spec cast(pid(), {service(), atom(), [json()]}) -> ok.
 cast(Pid, {<<"undefined">>, _Method, _Args}) when is_pid(Pid)->
@@ -82,7 +76,6 @@ publish_service(Pid, {SvcName, Handler}) when is_pid(Pid) andalso
     publish_service(Pid, {SvcName, Handler, undefined});
 publish_service(Pid, {SvcName, Handler, Callback}) when is_pid(Pid) andalso
                                                         is_atom(SvcName) ->
-    true = is_service(Handler) andalso is_service(Callback),
     send_command(Pid, 'JOINWORKERPOOL',
                  {[{name,     SvcName},
                    {handler,  Handler},
